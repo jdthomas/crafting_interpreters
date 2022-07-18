@@ -1,5 +1,5 @@
 use crate::lox::Lox;
-use crate::tokens::{Token, TokenType};
+use crate::tokens::{keywords, Token, TokenType};
 use anyhow::Result;
 use itertools::peek_nth;
 
@@ -155,10 +155,19 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
                 {
                     value.push(chars.next().unwrap());
                 }
-                tokens.push(Token {
-                    token_type: TokenType::IDENTIFIER(value.into_iter().collect()),
-                    line,
-                });
+                let value: String = value.into_iter().collect();
+                let kw = keywords();
+                if let Some(token_type) = kw.get(&value) {
+                    tokens.push(Token {
+                        token_type: (*token_type).clone(),
+                        line,
+                    });
+                } else {
+                    tokens.push(Token {
+                        token_type: TokenType::IDENTIFIER(value),
+                        line,
+                    });
+                }
             }
             c => {
                 lox.error(line, &format!("Unexpected character {:?}.", c));
