@@ -1,0 +1,13 @@
+[package]
+name = "crafting_interpreters_part_1"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0.58"
+clap = { version = "3.2.12", features = ["derive"] }
+itertools = "0.10.3"
