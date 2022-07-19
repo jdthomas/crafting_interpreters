@@ -1,9 +1,9 @@
-use crate::lox::Lox;
+use crate::lox_error::LoxError;
 use crate::tokens::{keywords, Token, TokenType};
 use anyhow::Result;
 use itertools::peek_nth;
 
-pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
+pub fn scan_tokens(lox: &mut dyn LoxError, source: &str) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
     let mut line = 1;
     let mut chars = peek_nth(source.chars());
@@ -57,6 +57,7 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
             // One or two character tokens.
             '!' => tokens.push(Token {
                 token_type: if chars.peek() == Some(&'=') {
+                    chars.next();
                     TokenType::BANG_EQUAL
                 } else {
                     TokenType::BANG
@@ -65,6 +66,7 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
             }),
             '=' => tokens.push(Token {
                 token_type: if chars.peek() == Some(&'=') {
+                    chars.next();
                     TokenType::EQUAL_EQUAL
                 } else {
                     TokenType::EQUAL
@@ -73,6 +75,7 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
             }),
             '<' => tokens.push(Token {
                 token_type: if chars.peek() == Some(&'=') {
+                    chars.next();
                     TokenType::LESS_EQUAL
                 } else {
                     TokenType::LESS
@@ -81,6 +84,7 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
             }),
             '>' => tokens.push(Token {
                 token_type: if chars.peek() == Some(&'=') {
+                    chars.next();
                     TokenType::GREATER_EQUAL
                 } else {
                     TokenType::GREATER
@@ -181,4 +185,365 @@ pub fn scan_tokens(lox: &mut Lox, source: &str) -> Result<Vec<Token>> {
         line,
     });
     Ok(tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct TestLox {
+        pub has_error: bool,
+    }
+
+    impl LoxError for TestLox {
+        fn error(&mut self, line: i32, message: &str) {
+            self.report(line, "", message);
+        }
+
+        fn report(&mut self, line: i32, wh: &str, message: &str) {
+            self.has_error = true;
+        }
+
+        fn has_error(&self) -> bool {
+            self.has_error
+        }
+    }
+
+    #[test]
+    fn test_empty() {
+        let mut lox = TestLox { has_error: false };
+        let input = "";
+        let expected = vec![Token {
+            token_type: TokenType::EOF,
+            line: 1,
+        }];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_identifier() {
+        let mut lox = TestLox { has_error: false };
+        let input = "asdf";
+        let expected = vec![
+            Token {
+                token_type: TokenType::IDENTIFIER("asdf".to_string()),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_digit() {
+        let mut lox = TestLox { has_error: false };
+        let input = "1";
+        let expected = vec![
+            Token {
+                token_type: TokenType::NUMBER(1.0),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_number() {
+        let mut lox = TestLox { has_error: false };
+        let input = "123.123 321";
+        let expected = vec![
+            Token {
+                token_type: TokenType::NUMBER(123.123),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::NUMBER(321.0),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_simple_string() {
+        let mut lox = TestLox { has_error: false };
+        let input = "\"asdf\"";
+        let expected = vec![
+            Token {
+                token_type: TokenType::STRING(input[1..input.len() - 1].to_string()),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_string() {
+        let mut lox = TestLox { has_error: false };
+        let input = "\" asdf\n\t\"";
+        let expected = vec![
+            Token {
+                token_type: TokenType::STRING(input[1..input.len() - 1].to_string()),
+                line: 2, // FIXME: Is this what we expect?
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 2,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_punct() {
+        let mut lox = TestLox { has_error: false };
+        let input = "(){},.-+;/*";
+        let expected = vec![
+            Token {
+                token_type: TokenType::LEFT_PAREN,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::RIGHT_PAREN,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::LEFT_BRACE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::RIGHT_BRACE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::COMMA,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::DOT,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::MINUS,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::PLUS,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::SEMICOLON,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::SLASH,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::STAR,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_punct2() {
+        let mut lox = TestLox { has_error: false };
+        let input = "! != = == > >= < <= ";
+        let expected = vec![
+            Token {
+                token_type: TokenType::BANG,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::BANG_EQUAL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EQUAL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EQUAL_EQUAL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::GREATER,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::GREATER_EQUAL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::LESS,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::LESS_EQUAL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_keywords() {
+        let mut lox = TestLox { has_error: false };
+        let input = "and class else false fun for if nil or print return super this true var while";
+        let expected = vec![
+            Token {
+                token_type: TokenType::AND,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::CLASS,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::ELSE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::FALSE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::FUN,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::FOR,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::IF,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::NIL,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::OR,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::PRINT,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::RETURN,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::SUPER,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::THIS,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::TRUE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::VAR,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::WHILE,
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_comment() {
+        let mut lox = TestLox { has_error: false };
+        let input = "something // comment";
+        let expected = vec![
+            Token {
+                token_type: TokenType::IDENTIFIER("something".to_string()),
+                line: 1,
+            },
+            Token {
+                token_type: TokenType::EOF,
+                line: 1,
+            },
+        ];
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        assert_eq!(tokens, expected);
+        assert_eq!(lox.has_error(), false);
+    }
+
+    #[test]
+    fn test_unexp_chr() {
+        let mut lox = TestLox { has_error: false };
+        let input = "[]";
+        let tokens = scan_tokens(&mut lox, input).unwrap();
+        let expected = vec![Token {
+            token_type: TokenType::EOF,
+            line: 1,
+        }];
+        // FIXME: SHould this be an error return?
+        assert_eq!(&tokens, &expected);
+        assert_eq!(lox.has_error(), true);
+    }
+
+    #[test]
+    fn test_unterm_string() {
+        let mut lox = TestLox { has_error: false };
+        let input = "\"asdfa";
+        let tokens = scan_tokens(&mut lox, input);
+        assert!(tokens.is_err());
+        assert_eq!(lox.has_error(), true);
+    }
 }

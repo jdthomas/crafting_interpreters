@@ -1,3 +1,4 @@
+use crate::lox_error::LoxError;
 use crate::scanner;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -20,12 +21,14 @@ impl Lox {
             Ok(())
         }
     }
+}
 
-    pub fn error(&mut self, line: i32, message: &str) {
+impl LoxError for Lox {
+    fn error(&mut self, line: i32, message: &str) {
         self.report(line, "", message);
     }
 
-    pub fn report(&mut self, line: i32, wh: &str, message: &str) {
+    fn report(&mut self, line: i32, wh: &str, message: &str) {
         println!(
             "[line {line}] Error{wh}: {message}",
             line = line,
@@ -33,5 +36,9 @@ impl Lox {
             message = message
         );
         self.has_error = true;
+    }
+
+    fn has_error(&self) -> bool {
+        self.has_error
     }
 }
