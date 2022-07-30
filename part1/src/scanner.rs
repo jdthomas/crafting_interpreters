@@ -199,7 +199,7 @@ mod tests {
             self.report(line, "", message);
         }
 
-        fn report(&mut self, line: i32, wh: &str, message: &str) {
+        fn report(&mut self, _line: i32, _wh: &str, _message: &str) {
             self.has_error = true;
         }
 

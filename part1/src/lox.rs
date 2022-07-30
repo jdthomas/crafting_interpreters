@@ -1,4 +1,5 @@
 use crate::lox_error::LoxError;
+use crate::parser;
 use crate::scanner;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -15,6 +16,12 @@ impl Lox {
     pub fn run(&mut self, source: String) -> Result<()> {
         let tokens = scanner::scan_tokens(self, &source);
         println!("Tokens: {:#?}", tokens);
+        // parser::parse(&mut tokens?.iter().peekable())?;
+        let tok = tokens?;
+        let mut tok = tok.iter().peekable();
+        let mut parser = parser::Parser::new(&mut tok, self);
+        let ast = parser.parse();
+        println!("AST: {}", ast);
         if self.has_error {
             Err(anyhow!("Failure"))
         } else {
