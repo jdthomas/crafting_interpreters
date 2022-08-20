@@ -10,7 +10,6 @@
 
 use crate::lox_error::LoxError;
 use crate::tokens::{Token, TokenType};
-use itertools::Itertools;
 use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
@@ -21,18 +20,18 @@ pub enum Expr {
     Binary(Box<Expr>, TokenType, Box<Expr>),
     Unary(TokenType, Box<Expr>),
     Literal(TokenType),
-    Grouping(Vec<Expr>),
+    Grouping(Box<Expr>),
 }
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Binary(left, t, right) => {
-                write!(f, "({} {} {})", t, left.to_string(), right.to_string())
+                write!(f, "({} {} {})", t, left, right)
             }
-            Self::Unary(t, e) => write!(f, "({} {})", t, e.to_string()),
-            Self::Literal(t) => write!(f, "({})", t),
-            Self::Grouping(s) => write!(f, "({})", s.iter().map(|x| x.to_string()).join(",")),
+            Self::Unary(t, e) => write!(f, "({} {})", t, e),
+            Self::Literal(t) => write!(f, "{}", t),
+            Self::Grouping(s) => write!(f, "({})", s),
         }
     }
 }
@@ -137,7 +136,7 @@ impl<'a> Parser<'a> {
                     self.lox.report(cur_token.line, "", "");
                     todo!() /*set parse error*/
                 });
-                expr
+                Expr::Grouping(Box::new(expr))
             }
 
             TokenType::EOF => Expr::Literal(TokenType::EOF),

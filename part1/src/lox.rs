@@ -1,3 +1,4 @@
+use crate::interpreter;
 use crate::lox_error::LoxError;
 use crate::parser;
 use crate::scanner;
@@ -13,20 +14,27 @@ impl Lox {
         Lox { has_error: false }
     }
 
+    fn check_err(&self) -> Result<()> {
+        match self.has_error {
+            false => Ok(()),
+            true => Err(anyhow!("Failure")),
+        }
+    }
+
     pub fn run(&mut self, source: String) -> Result<()> {
         let tokens = scanner::scan_tokens(self, &source);
         println!("Tokens: {:#?}", tokens);
+        self.check_err()?;
         // parser::parse(&mut tokens?.iter().peekable())?;
         let tok = tokens?;
         let mut tok = tok.iter().peekable();
         let mut parser = parser::Parser::new(&mut tok, self);
         let ast = parser.parse();
         println!("AST: {}", ast);
-        if self.has_error {
-            Err(anyhow!("Failure"))
-        } else {
-            Ok(())
-        }
+        self.check_err()?;
+        let computed = interpreter::interpreter(&ast);
+        println!("Computed: {:?}", computed);
+        self.check_err()
     }
 }
 
