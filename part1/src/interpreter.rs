@@ -20,6 +20,7 @@ pub fn truthy(o: Object) -> bool {
         _ => true,
     }
 }
+
 pub fn equal(l: Object, r: Object) -> bool {
     match (l, r) {
         (Object::Nil, Object::Nil) => true,
@@ -37,6 +38,7 @@ pub fn evaluate_unary(t: &TokenType, e: &Expr) -> Object {
         _ => panic!("oopsies, bad unary"),
     }
 }
+
 pub fn evaluate_binary(left: &Expr, t: &TokenType, right: &Expr) -> Object {
     let left = interpreter(left);
     let right = interpreter(right);
@@ -67,7 +69,9 @@ pub fn evaluate_literal(t: &TokenType) -> Object {
         TokenType::TRUE => Object::Boolean(true),
         TokenType::NUMBER(n) => Object::Double(*n),
         TokenType::STRING(s) => Object::String(s.clone()),
-        _ => panic!("oopsies, unexpected literal"),
+        TokenType::NIL => Object::Nil,
+        TokenType::EOF => Object::Nil, // ?
+        _ => panic!("oopsies, unexpected literal '{:?}'", t),
     }
 }
 
