@@ -21,15 +21,6 @@ pub fn truthy(o: Object) -> bool {
     }
 }
 
-pub fn equal(l: Object, r: Object) -> bool {
-    match (l, r) {
-        (Object::Nil, Object::Nil) => true,
-        (Object::Nil, _) => false,
-        (_, Object::Nil) => false,
-        (a, b) => a == b,
-    }
-}
-
 pub fn evaluate_unary(t: &TokenType, e: &Expr) -> Object {
     let right = interpreter(e);
     match (t, right) {
@@ -56,8 +47,8 @@ pub fn evaluate_binary(left: &Expr, t: &TokenType, right: &Expr) -> Object {
         (Object::Double(l), TokenType::GREATER, Object::Double(r)) => Object::Boolean(l > r),
         (Object::Double(l), TokenType::GREATER_EQUAL, Object::Double(r)) => Object::Boolean(l >= r),
 
-        (l, TokenType::EQUAL_EQUAL, r) => Object::Boolean(equal(l, r)),
-        (l, TokenType::BANG_EQUAL, r) => Object::Boolean(!equal(l, r)),
+        (l, TokenType::EQUAL_EQUAL, r) => Object::Boolean(l == r),
+        (l, TokenType::BANG_EQUAL, r) => Object::Boolean(l != r),
 
         (l, t, r) => panic!("Bad binary expr '{:?}' '{}' '{:?}'", l, t, r),
     }
