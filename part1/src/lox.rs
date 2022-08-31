@@ -1,4 +1,5 @@
-use crate::interpreter;
+use crate::environment::Enviornment;
+use crate::interpreter::Interpreter;
 use crate::lox_error::LoxError;
 use crate::parser;
 use crate::scanner;
@@ -30,10 +31,10 @@ impl Lox {
         let mut tok = tok.iter().peekable();
         let mut parser = parser::Parser::new(&mut tok, self);
         let ast = parser.parse();
-        println!("AST: {}", ast);
+        println!("AST: {:?}", ast);
         self.check_err()?;
-        let computed = interpreter::interpreter(&ast);
-        println!("Computed: {:?}", computed);
+        let mut interpreter = Interpreter::new();
+        interpreter.interpret(&ast);
         self.check_err()
     }
 }

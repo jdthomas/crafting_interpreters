@@ -1,3 +1,10 @@
+// Lox Grammar
+// program        → statement* EOF ;
+// statement      → exprStmt
+//                | printStmt ;
+// exprStmt       → expression ";" ;
+// printStmt      → "print" expression ";" ;
+
 // expression     → equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -21,6 +28,15 @@ pub enum Expr {
     Unary(TokenType, Box<Expr>),
     Literal(TokenType),
     Grouping(Box<Expr>),
+    Variable(TokenType),
+    Assign(TokenType, Box<Expr>),
+}
+
+#[derive(Debug)]
+pub enum Stmt {
+    Expr(Expr),
+    Print(Expr),
+    Var(String, Option<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -32,6 +48,23 @@ impl fmt::Display for Expr {
             Self::Unary(t, e) => write!(f, "({} {})", t, e),
             Self::Literal(t) => write!(f, "{}", t),
             Self::Grouping(s) => write!(f, "({})", s),
+            Self::Variable(n) => {
+                write!(f, "{}", n)
+            }
+            Self::Assign(n, v) => {
+                write!(f, "(= {} {})", n, v)
+            }
+        }
+    }
+}
+
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expr(e) => write!(f, "{}", e),
+            Self::Print(e) => write!(f, "{}", e),
+            Self::Var(n, Some(e)) => write!(f, "{} = {}", n, e),
+            Self::Var(n, None) => write!(f, "{}", n),
         }
     }
 }
@@ -47,8 +80,21 @@ impl<'a> Parser<'a> {
         Self { tokens, lox }
     }
 
-    pub fn parse(&mut self) -> Expr {
-        self.expression()
+    pub fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements = vec![];
+        loop {
+            let cur_token = self.tokens.peek();
+            let cur_token = cur_token.unwrap_or(&&Token {
+                token_type: TokenType::EOF,
+                line: -1,
+            });
+
+            if cur_token.token_type == TokenType::EOF {
+                break;
+            }
+            statements.push(self.declaration());
+        }
+        statements
     }
 
     fn token_match(&mut self, t: &[TokenType]) -> Option<&'a Token> {
@@ -60,8 +106,88 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn declaration(&mut self) -> Stmt {
+        let cur_token = self.tokens.peek().unwrap();
+        match cur_token.token_type {
+            TokenType::VAR => self.var_declaration(),
+            _ => self.statement(),
+        }
+    }
+
+    fn var_declaration(&mut self) -> Stmt {
+        self.token_match(&[TokenType::VAR]); // consume VAR
+        let cur_token = self.tokens.peek().unwrap();
+        if let TokenType::IDENTIFIER(name) = cur_token.token_type.clone() {
+            self.tokens.next();
+
+            let mut initializer: Option<Expr> = None;
+            if self.token_match(&[TokenType::EQUAL]).is_some() {
+                initializer = Some(self.expression());
+            }
+
+            if let Some(_t) = self.token_match(&[TokenType::SEMICOLON]) {
+            } else {
+                // FIXME: report "Expect ';' after expression."
+            }
+
+            Stmt::Var(name, initializer)
+        } else {
+            // Parse error?
+            todo!()
+        }
+    }
+
+    fn statement(&mut self) -> Stmt {
+        let cur_token = self.tokens.peek().unwrap();
+        match cur_token.token_type {
+            TokenType::PRINT => self.print_statement(),
+            _ => self.expression_statement(),
+        }
+    }
+
+    fn expression_statement(&mut self) -> Stmt {
+        let expr = self.expression();
+        if let Some(_t) = self.token_match(&[TokenType::SEMICOLON]) {
+        } else {
+            // FIXME: report "Expect ';' after expression."
+        }
+
+        Stmt::Expr(expr)
+    }
+
+    fn print_statement(&mut self) -> Stmt {
+        self.token_match(&[TokenType::PRINT]);
+        let value = self.expression();
+
+        if let Some(_t) = self.token_match(&[TokenType::SEMICOLON]) {
+            // Ok
+        } else {
+            // FIXME: report problem
+            // "Expect ';' after value.";
+            // self.lox.report(cur_token.line, "", "");
+        };
+        Stmt::Print(value)
+    }
+
     fn expression(&mut self) -> Expr {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Expr {
+        let expr = self.equality();
+
+        if let Some(_) = self.token_match(&[TokenType::EQUAL]) {
+            // let equals = previous();
+            let value = self.assignment();
+
+            if let Expr::Variable(name) = expr {
+                return Expr::Assign(name, Box::new(value));
+            }
+
+            // error(equals, "Invalid assignment target.");
+            panic!("Invalid assignment target.");
+        }
+        expr
     }
 
     fn equality(&mut self) -> Expr {
@@ -140,6 +266,8 @@ impl<'a> Parser<'a> {
             }
 
             TokenType::EOF => Expr::Literal(TokenType::EOF),
+
+            TokenType::IDENTIFIER(name) => Expr::Variable(TokenType::IDENTIFIER(name.to_string())),
 
             _ => {
                 // TODO: Report error
