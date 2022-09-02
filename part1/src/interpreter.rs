@@ -133,6 +133,13 @@ impl Interpreter {
                     self.env.define(name.clone(), Object::Nil)
                 }
             }
+            Stmt::Block(stmts) => {
+                self.env.push_scope();
+                stmts.iter().for_each(|s| {
+                    self.execute(s);
+                });
+                self.env.pop_scope();
+            }
         }
     }
 

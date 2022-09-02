@@ -1,4 +1,3 @@
-use crate::environment::Enviornment;
 use crate::interpreter::Interpreter;
 use crate::lox_error::LoxError;
 use crate::parser;

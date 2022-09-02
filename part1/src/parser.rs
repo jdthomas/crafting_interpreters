@@ -37,6 +37,7 @@ pub enum Stmt {
     Expr(Expr),
     Print(Expr),
     Var(String, Option<Expr>),
+    Block(Vec<Stmt>),
 }
 
 impl fmt::Display for Expr {
@@ -65,6 +66,7 @@ impl fmt::Display for Stmt {
             Self::Print(e) => write!(f, "{}", e),
             Self::Var(n, Some(e)) => write!(f, "{} = {}", n, e),
             Self::Var(n, None) => write!(f, "{}", n),
+            Self::Block(stmts) => write!(f, "{:?}", stmts),
         }
     }
 }
@@ -141,8 +143,24 @@ impl<'a> Parser<'a> {
         let cur_token = self.tokens.peek().unwrap();
         match cur_token.token_type {
             TokenType::PRINT => self.print_statement(),
+            TokenType::LEFT_BRACE => self.block(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn block(&mut self) -> Stmt {
+        self.tokens.next(); // consume LEFT_BRACE
+        let mut statements: Vec<Stmt> = vec![];
+        loop {
+            let cur_token = self.tokens.peek().unwrap();
+            if cur_token.token_type == TokenType::RIGHT_BRACE {
+                break;
+            }
+            statements.push(self.declaration());
+        }
+
+        self.tokens.next(); // consume(RIGHT_BRACE, "Expect '}' after block.");
+        Stmt::Block(statements)
     }
 
     fn expression_statement(&mut self) -> Stmt {
@@ -176,7 +194,7 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> Expr {
         let expr = self.equality();
 
-        if let Some(_) = self.token_match(&[TokenType::EQUAL]) {
+        if self.token_match(&[TokenType::EQUAL]).is_some() {
             // let equals = previous();
             let value = self.assignment();
 
