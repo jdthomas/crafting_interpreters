@@ -39,7 +39,7 @@ fn run_prompt() -> Result<()> {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    println!("Hello, world! {:?}", args);
+    // println!("Hello, world! {:?}", args);
     match args.script {
         None => run_prompt(),
         Some(script) => run_file(&script),

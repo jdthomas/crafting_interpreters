@@ -24,16 +24,26 @@ impl Lox {
     pub fn run(&mut self, source: String) -> Result<()> {
         let tokens = scanner::scan_tokens(self, &source);
         println!("Tokens: {:#?}", tokens);
-        self.check_err()?;
+        if self.check_err().is_err() {
+            ::std::process::exit(65);
+        }
+
         // parser::parse(&mut tokens?.iter().peekable())?;
         let tok = tokens?;
         let mut tok = tok.iter().peekable();
         let mut parser = parser::Parser::new(&mut tok, self);
+
         let ast = parser.parse();
-        println!("AST: {:?}", ast);
-        self.check_err()?;
+        // println!("AST: {:?}", ast);
+        if self.check_err().is_err() {
+            ::std::process::exit(65);
+        }
         let mut interpreter = Interpreter::new();
         interpreter.interpret(&ast);
+
+        if self.check_err().is_err() {
+            ::std::process::exit(70);
+        }
         self.check_err()
     }
 }

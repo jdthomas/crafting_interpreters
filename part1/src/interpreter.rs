@@ -102,6 +102,7 @@ impl Interpreter {
             Expr::Grouping(s) => self.evaluate_group(s),
             Expr::Variable(n) => {
                 if let TokenType::IDENTIFIER(name) = n {
+                    // FIXME: handle unseen symbol WRT unwarp
                     self.env.get(name).unwrap()
                 } else {
                     Object::Nil

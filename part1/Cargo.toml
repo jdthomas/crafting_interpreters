@@ -2,6 +2,7 @@
 name = "crafting_interpreters_part_1"
 version = "0.1.0"
 edition = "2021"
+default-run = "interpreter"
 
 [lib]
 name = "lib"
@@ -10,5 +11,16 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = "1.0.58"
 clap = { version = "3.2.12", features = ["derive"] }
+colored = "2.0.0"
 itertools = "0.10.3"
+lazy_static = "1.4.0"
 maplit = "1.0.2"
+regex = "1.6.0"
+
+[[bin]]
+name = "interpreter"
+path = "src/main.rs"
+
+[[bin]]
+name = "test_driver"
+path = "test_driver/src/main.rs"
