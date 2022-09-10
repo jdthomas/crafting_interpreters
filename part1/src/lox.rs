@@ -39,7 +39,7 @@ impl Lox {
             ::std::process::exit(65);
         }
         let mut interpreter = Interpreter::new();
-        interpreter.interpret(&ast);
+        let _rte = interpreter.interpret(&ast);
 
         if self.check_err().is_err() {
             ::std::process::exit(70);

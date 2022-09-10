@@ -3,6 +3,8 @@ use std::fmt;
 use crate::environment::Enviornment;
 use crate::parser::{Expr, Stmt};
 use crate::tokens::TokenType;
+use anyhow::anyhow;
+use anyhow::Result;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Object {
@@ -41,60 +43,62 @@ impl Interpreter {
             env: Enviornment::new(),
         }
     }
-    pub fn evaluate_unary(&mut self, t: &TokenType, e: &Expr) -> Object {
-        let right = self.evaluate(e);
+    pub fn evaluate_unary(&mut self, t: &TokenType, e: &Expr) -> Result<Object> {
+        let right = self.evaluate(e)?;
         match (t, right) {
-            (TokenType::MINUS, Object::Double(x)) => Object::Double(-x),
-            (TokenType::BANG, o) => Object::Boolean(!truthy(o)),
-            _ => panic!("oopsies, bad unary"),
+            (TokenType::MINUS, Object::Double(x)) => Ok(Object::Double(-x)),
+            (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(o))),
+            _ => Err(anyhow!("oopsies, bad unary")),
         }
     }
 
-    pub fn evaluate_binary(&mut self, left: &Expr, t: &TokenType, right: &Expr) -> Object {
-        let left = self.evaluate(left);
-        let right = self.evaluate(right);
+    pub fn evaluate_binary(&mut self, left: &Expr, t: &TokenType, right: &Expr) -> Result<Object> {
+        let left = self.evaluate(left)?;
+        let right = self.evaluate(right)?;
         match (left, t, right) {
             (Object::String(l), TokenType::PLUS, Object::String(r)) => {
-                Object::String(format!("{}{}", l, r))
+                Ok(Object::String(format!("{}{}", l, r)))
             }
-            (Object::Double(l), TokenType::PLUS, Object::Double(r)) => Object::Double(l + r),
-            (Object::Double(l), TokenType::MINUS, Object::Double(r)) => Object::Double(l - r),
-            (Object::Double(l), TokenType::STAR, Object::Double(r)) => Object::Double(l * r),
-            (Object::Double(l), TokenType::SLASH, Object::Double(r)) => Object::Double(l / r),
+            (Object::Double(l), TokenType::PLUS, Object::Double(r)) => Ok(Object::Double(l + r)),
+            (Object::Double(l), TokenType::MINUS, Object::Double(r)) => Ok(Object::Double(l - r)),
+            (Object::Double(l), TokenType::STAR, Object::Double(r)) => Ok(Object::Double(l * r)),
+            (Object::Double(l), TokenType::SLASH, Object::Double(r)) => Ok(Object::Double(l / r)),
 
-            (Object::Double(l), TokenType::LESS, Object::Double(r)) => Object::Boolean(l < r),
+            (Object::Double(l), TokenType::LESS, Object::Double(r)) => Ok(Object::Boolean(l < r)),
             (Object::Double(l), TokenType::LESS_EQUAL, Object::Double(r)) => {
-                Object::Boolean(l <= r)
+                Ok(Object::Boolean(l <= r))
             }
-            (Object::Double(l), TokenType::GREATER, Object::Double(r)) => Object::Boolean(l > r),
+            (Object::Double(l), TokenType::GREATER, Object::Double(r)) => {
+                Ok(Object::Boolean(l > r))
+            }
             (Object::Double(l), TokenType::GREATER_EQUAL, Object::Double(r)) => {
-                Object::Boolean(l >= r)
+                Ok(Object::Boolean(l >= r))
             }
 
-            (l, TokenType::EQUAL_EQUAL, r) => Object::Boolean(l == r),
-            (l, TokenType::BANG_EQUAL, r) => Object::Boolean(l != r),
+            (l, TokenType::EQUAL_EQUAL, r) => Ok(Object::Boolean(l == r)),
+            (l, TokenType::BANG_EQUAL, r) => Ok(Object::Boolean(l != r)),
 
-            (l, t, r) => panic!("Bad binary expr '{:?}' '{}' '{:?}'", l, t, r),
+            (l, t, r) => Err(anyhow!("Bad binary expr '{:?}' '{}' '{:?}'", l, t, r)),
         }
     }
 
-    pub fn evaluate_literal(&mut self, t: &TokenType) -> Object {
+    pub fn evaluate_literal(&mut self, t: &TokenType) -> Result<Object> {
         match t {
-            TokenType::FALSE => Object::Boolean(false),
-            TokenType::TRUE => Object::Boolean(true),
-            TokenType::NUMBER(n) => Object::Double(*n),
-            TokenType::STRING(s) => Object::String(s.clone()),
-            TokenType::NIL => Object::Nil,
-            TokenType::EOF => Object::Nil, // ?
-            _ => panic!("oopsies, unexpected literal '{:?}'", t),
+            TokenType::FALSE => Ok(Object::Boolean(false)),
+            TokenType::TRUE => Ok(Object::Boolean(true)),
+            TokenType::NUMBER(n) => Ok(Object::Double(*n)),
+            TokenType::STRING(s) => Ok(Object::String(s.clone())),
+            TokenType::NIL => Ok(Object::Nil),
+            TokenType::EOF => Ok(Object::Nil), // ?
+            _ => Err(anyhow!("oopsies, unexpected literal '{:?}'", t)),
         }
     }
 
-    pub fn evaluate_group(&mut self, e: &Expr) -> Object {
+    pub fn evaluate_group(&mut self, e: &Expr) -> Result<Object> {
         self.evaluate(e)
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Object {
+    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object> {
         match expr {
             Expr::Binary(left, t, right) => self.evaluate_binary(left, t, right),
             Expr::Unary(t, e) => self.evaluate_unary(t, e),
@@ -103,32 +107,32 @@ impl Interpreter {
             Expr::Variable(n) => {
                 if let TokenType::IDENTIFIER(name) = n {
                     // FIXME: handle unseen symbol WRT unwarp
-                    self.env.get(name).unwrap()
+                    self.env.get(name)
                 } else {
-                    Object::Nil
+                    Ok(Object::Nil)
                 }
             }
             Expr::Assign(n, v) => {
-                let val = self.evaluate(v);
+                let val = self.evaluate(v)?;
                 if let TokenType::IDENTIFIER(name) = n {
-                    self.env.assign(name.to_string(), val).unwrap();
-                    self.env.get(name).unwrap()
+                    self.env.assign(name.to_string(), val)?;
+                    self.env.get(name)
                 } else {
-                    Object::Nil
+                    Ok(Object::Nil)
                 }
             }
         }
     }
 
-    pub fn execute(&mut self, ast: &Stmt) {
+    pub fn execute(&mut self, ast: &Stmt) -> Result<()> {
         match ast {
-            Stmt::Print(e) => println!("{}", self.evaluate(e)),
+            Stmt::Print(e) => println!("{}", self.evaluate(e)?),
             Stmt::Expr(e) => {
-                let _ = self.evaluate(e);
+                let _ = self.evaluate(e)?;
             }
             Stmt::Var(name, e) => {
                 if let Some(expr) = e {
-                    let o = self.evaluate(expr);
+                    let o = self.evaluate(expr)?;
                     self.env.define(name.clone(), o)
                 } else {
                     self.env.define(name.clone(), Object::Nil)
@@ -142,11 +146,14 @@ impl Interpreter {
                 self.env.pop_scope();
             }
         }
+        Ok(())
     }
 
-    pub fn interpret(&mut self, statements: &[Stmt]) {
+    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<()> {
         statements
             .iter()
-            .for_each(|statement| self.execute(statement))
+            .map(|statement| self.execute(statement))
+            .into_iter()
+            .collect()
     }
 }
