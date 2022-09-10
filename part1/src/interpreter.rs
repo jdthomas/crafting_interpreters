@@ -18,10 +18,11 @@ pub enum Object {
 #[derive(Debug)]
 pub struct LoxRuntimeError {
     t: Token,
+    message: String,
 }
 impl Display for LoxRuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.t)
+        write!(f, "{}.\n   at line {}", self.message, self.t.line)
     }
 }
 
@@ -59,7 +60,10 @@ impl Interpreter {
         match (&t.token_type, right) {
             (TokenType::MINUS, Object::Double(x)) => Ok(Object::Double(-x)),
             (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(o))),
-            _ => Err(anyhow!("oopsies, bad unary")).context(LoxRuntimeError { t: t.clone() }),
+            _ => Err(anyhow!("oopsies, bad unary")).context(LoxRuntimeError {
+                t: t.clone(),
+                message: "".to_owned(),
+            }),
         }
     }
 
@@ -89,8 +93,12 @@ impl Interpreter {
             (l, TokenType::EQUAL_EQUAL, r) => Ok(Object::Boolean(l == r)),
             (l, TokenType::BANG_EQUAL, r) => Ok(Object::Boolean(l != r)),
 
-            (l, tt, r) => Err(anyhow!("Bad binary expr '{:?}' '{}' '{:?}'", l, tt, r))
-                .context(LoxRuntimeError { t: t.clone() }),
+            (l, tt, r) => Err(anyhow!("Bad binary expr '{:?}' '{}' '{:?}'", l, tt, r)).context(
+                LoxRuntimeError {
+                    t: t.clone(),
+                    message: "Bad binary expr".to_owned(),
+                },
+            ),
         }
     }
 
@@ -102,8 +110,12 @@ impl Interpreter {
             TokenType::STRING(s) => Ok(Object::String(s.clone())),
             TokenType::NIL => Ok(Object::Nil),
             TokenType::EOF => Ok(Object::Nil), // ?
-            _ => Err(anyhow!("oopsies, unexpected literal '{:?}'", t.token_type))
-                .context(LoxRuntimeError { t: t.clone() }),
+            _ => Err(anyhow!("oopsies, unexpected literal '{:?}'", t.token_type)).context(
+                LoxRuntimeError {
+                    t: t.clone(),
+                    message: format!("unexpected literal '{:?}'", t.token_type),
+                },
+            ),
         }
     }
 
@@ -120,7 +132,10 @@ impl Interpreter {
             Expr::Variable(n) => {
                 if let TokenType::IDENTIFIER(name) = &n.token_type {
                     // FIXME: handle unseen symbol WRT unwarp
-                    self.env.get(name).context(LoxRuntimeError { t: n.clone() })
+                    self.env.get(name).context(LoxRuntimeError {
+                        t: n.clone(),
+                        message: format!("Undefined variable '{}'", name),
+                    })
                 } else {
                     Ok(Object::Nil)
                 }
@@ -130,7 +145,10 @@ impl Interpreter {
                 if let TokenType::IDENTIFIER(name) = &n.token_type {
                     self.env
                         .assign(name.to_string(), val)
-                        .context(LoxRuntimeError { t: n.clone() })?;
+                        .context(LoxRuntimeError {
+                            t: n.clone(),
+                            message: format!("Undefined variable '{}'", name),
+                        })?;
                     self.env.get(name)
                 } else {
                     Ok(Object::Nil)

@@ -12,6 +12,7 @@ path = "src/lib.rs"
 anyhow = "1.0.58"
 clap = { version = "3.2.12", features = ["derive"] }
 colored = "2.0.0"
+derive_more = "0.99.17"
 itertools = "0.10.3"
 lazy_static = "1.4.0"
 maplit = "1.0.2"

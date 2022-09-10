@@ -1,6 +1,10 @@
+use anyhow::Context;
 use anyhow::Result;
 use clap::Parser;
 use lib::lox::Lox;
+use lib::lox::LoxParseError;
+use lib::lox::LoxRuntimeError;
+use lib::lox::LoxScanError;
 use std::fs;
 use std::io;
 use std::io::BufRead;
@@ -40,8 +44,18 @@ fn run_prompt() -> Result<()> {
 fn main() -> Result<()> {
     let args = Args::parse();
     // println!("Hello, world! {:?}", args);
-    match args.script {
+    let rv = match args.script {
         None => run_prompt(),
         Some(script) => run_file(&script),
+    };
+    if let Err(e) = &rv {
+        if e.downcast_ref::<LoxScanError>().is_some() {
+            ::std::process::exit(65);
+        } else if e.downcast_ref::<LoxRuntimeError>().is_some() {
+            ::std::process::exit(70);
+        } else if e.downcast_ref::<LoxParseError>().is_some() {
+            ::std::process::exit(65);
+        }
     }
+    rv
 }

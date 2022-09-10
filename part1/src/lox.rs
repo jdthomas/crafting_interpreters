@@ -1,13 +1,21 @@
-use crate::interpreter::{Interpreter, LoxRuntimeError};
+use crate::interpreter::Interpreter;
 use crate::lox_error::LoxError;
 use crate::parser;
 use crate::scanner;
 use anyhow::anyhow;
+use anyhow::Context;
 use anyhow::Result;
+use derive_more::Display;
 
 pub struct Lox {
     pub has_error: bool,
 }
+
+#[derive(Debug, Display)]
+pub struct LoxScanError {}
+#[derive(Debug, Display)]
+pub struct LoxParseError {}
+pub use crate::interpreter::LoxRuntimeError;
 
 impl Lox {
     pub fn new() -> Lox {
@@ -25,7 +33,7 @@ impl Lox {
         let tokens = scanner::scan_tokens(self, &source);
         // println!("Tokens: {:#?}", tokens);
         if self.check_err().is_err() {
-            ::std::process::exit(65);
+            return Err(anyhow!("failed to scan")).context(LoxScanError {});
         }
 
         // parser::parse(&mut tokens?.iter().peekable())?;
@@ -36,16 +44,16 @@ impl Lox {
         let ast = parser.parse();
         // println!("AST: {:?}", ast);
         if self.check_err().is_err() {
-            ::std::process::exit(65);
+            return Err(anyhow!("failed to scan")).context(LoxParseError {});
         }
         let mut interpreter = Interpreter::new();
         let rte = interpreter.interpret(&ast);
         println!("{:?}", rte);
-        if let Err(err) = rte {
+        if let Err(err) = &rte {
             if let Some(e) = err.downcast_ref::<LoxRuntimeError>() {
-                println!("{}", e);
+                eprintln!("{}", e);
             }
-            ::std::process::exit(70);
+            return rte;
         }
 
         self.check_err()
@@ -58,7 +66,7 @@ impl LoxError for Lox {
     }
 
     fn report(&mut self, line: i32, wh: &str, message: &str) {
-        println!(
+        eprintln!(
             "[line {line}] Error{wh}: {message}",
             line = line,
             wh = wh,

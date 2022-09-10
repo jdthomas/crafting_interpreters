@@ -117,18 +117,16 @@ impl Test {
         //     fail("Expected runtime error '$_expectedRuntimeError' and got none.");
         //     return;
         //  }
-        let matching = zip(&self.expectedErrors, std_err)
-            .filter(|&(a, b)| a == b)
-            .count();
-        if matching == std_err.len() && matching == self.expectedErrors.len() {
-            Ok(())
-        } else {
-            Err(anyhow!("boop"))
+
+        if let Some(expected_runtime_error) = &self.expectedRuntimeError {
+            if std_err[0] != expected_runtime_error.output {
+                return Err(anyhow!(
+                    "Expected runtime error '{}' and got:\n{}",
+                    expected_runtime_error.output,
+                    std_err[0]
+                ));
+            }
         }
-        // if (errorLines[0] != _expectedRuntimeError) {
-        //     fail("Expected runtime error '$_expectedRuntimeError' and got:");
-        //     fail(errorLines[0]);
-        //   }
 
         //   // Make sure the stack trace has the right line.
         //   RegExpMatch match;
@@ -147,9 +145,20 @@ impl Test {
         //           "but was on line $stackLine.");
         //     }
         //   }
+        Ok(())
     }
 
     fn validate_compile_errors(&self, std_err: &Vec<String>) -> Result<()> {
+        // let matching = zip(&self.expectedErrors, std_err)
+        //     .filter(|&(a, b)| a == b)
+        //     .count();
+        // println!("{:?} {:?} {}", &self.expectedErrors, std_err, matching );
+        // if matching == std_err.len() && matching == self.expectedErrors.len() {
+        //     Ok(())
+        // } else {
+        //     Err(anyhow!("boop"))
+        // }
+
         // // Validate that every compile error was expected.
         // var foundErrors = <String>{};
         // var unexpectedCount = 0;
@@ -246,6 +255,10 @@ fn run_test(test: Test, prog: &str) -> Result<()> {
         .lines()
         .filter_map(|x| x.ok())
         .collect();
+
+    println!("stdout: {:?}", output_lines);
+    println!("stderr: {:?}", error_lines);
+    println!("exitcode: {:?}", exit_code);
 
     test.validate_exit_code(exit_code)?;
     test.validate_runtime_error(&error_lines)?;
