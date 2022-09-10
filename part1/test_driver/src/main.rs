@@ -211,6 +211,45 @@ impl Test {
         }
     }
     fn validate_output(&self, _std_out: &[String]) -> Result<()> {
+        // if !self.expected_output.is_empty() {
+        //     let matching = zip(&self.expected_output, std_out)
+        //         .filter(|&(a, b)| &a.output == b)
+        //         .count();
+        //     println!("{:?} {:?} {}", &self.expected_output, std_out, matching);
+        //     if matching == std_out.len() && matching == self.expected_output.len() {
+        //         Ok(())
+        //     } else {
+        //         Err(anyhow!("Output Error"))
+        //     }
+        //     //         // Remove the trailing last empty line.
+        //     // if (outputLines.isNotEmpty && outputLines.last == "") {
+        //     //     outputLines.removeLast();
+        //     //   }
+
+        //     //   var index = 0;
+        //     //   for (; index < outputLines.length; index++) {
+        //     //     var line = outputLines[index];
+        //     //     if (index >= _expectedOutput.length) {
+        //     //       fail("Got output '$line' when none was expected.");
+        //     //       continue;
+        //     //     }
+
+        //     //     var expected = _expectedOutput[index];
+        //     //     if (expected.output != line) {
+        //     //       fail("Expected output '${expected.output}' on line ${expected.line} "
+        //     //           " and got '$line'.");
+        //     //     }
+        //     //   }
+
+        //     //   while (index < _expectedOutput.length) {
+        //     //     var expected = _expectedOutput[index];
+        //     //     fail("Missing expected output '${expected.output}' on line "
+        //     //         "${expected.line}.");
+        //     //     index++;
+        //     //   }
+        // } else {
+        //     Ok(())
+        // }
         Ok(())
     }
 }
@@ -265,9 +304,9 @@ fn run_test(test: Test, prog: &str) -> Result<()> {
     println!("stderr: {:?}", error_lines);
     println!("exitcode: {:?}", exit_code);
 
-    test.validate_exit_code(exit_code)?;
     test.validate_runtime_error(&error_lines)?;
     test.validate_compile_errors(&error_lines)?;
+    test.validate_exit_code(exit_code)?;
     test.validate_output(&output_lines)?;
 
     // // Display the results.
