@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::environment::Enviornment;
 use crate::parser::{Expr, Stmt};
-use crate::tokens::TokenType;
+use crate::tokens::{Token, TokenType};
 use anyhow::anyhow;
 use anyhow::Result;
 
@@ -43,19 +43,19 @@ impl Interpreter {
             env: Enviornment::new(),
         }
     }
-    pub fn evaluate_unary(&mut self, t: &TokenType, e: &Expr) -> Result<Object> {
+    pub fn evaluate_unary(&mut self, t: &Token, e: &Expr) -> Result<Object> {
         let right = self.evaluate(e)?;
-        match (t, right) {
+        match (&t.token_type, right) {
             (TokenType::MINUS, Object::Double(x)) => Ok(Object::Double(-x)),
             (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(o))),
             _ => Err(anyhow!("oopsies, bad unary")),
         }
     }
 
-    pub fn evaluate_binary(&mut self, left: &Expr, t: &TokenType, right: &Expr) -> Result<Object> {
+    pub fn evaluate_binary(&mut self, left: &Expr, t: &Token, right: &Expr) -> Result<Object> {
         let left = self.evaluate(left)?;
         let right = self.evaluate(right)?;
-        match (left, t, right) {
+        match (left, &t.token_type, right) {
             (Object::String(l), TokenType::PLUS, Object::String(r)) => {
                 Ok(Object::String(format!("{}{}", l, r)))
             }
@@ -82,8 +82,8 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate_literal(&mut self, t: &TokenType) -> Result<Object> {
-        match t {
+    pub fn evaluate_literal(&mut self, t: &Token) -> Result<Object> {
+        match &t.token_type {
             TokenType::FALSE => Ok(Object::Boolean(false)),
             TokenType::TRUE => Ok(Object::Boolean(true)),
             TokenType::NUMBER(n) => Ok(Object::Double(*n)),
@@ -105,7 +105,7 @@ impl Interpreter {
             Expr::Literal(t) => self.evaluate_literal(t),
             Expr::Grouping(s) => self.evaluate_group(s),
             Expr::Variable(n) => {
-                if let TokenType::IDENTIFIER(name) = n {
+                if let TokenType::IDENTIFIER(name) = &n.token_type {
                     // FIXME: handle unseen symbol WRT unwarp
                     self.env.get(name)
                 } else {
@@ -114,7 +114,7 @@ impl Interpreter {
             }
             Expr::Assign(n, v) => {
                 let val = self.evaluate(v)?;
-                if let TokenType::IDENTIFIER(name) = n {
+                if let TokenType::IDENTIFIER(name) = &n.token_type {
                     self.env.assign(name.to_string(), val)?;
                     self.env.get(name)
                 } else {

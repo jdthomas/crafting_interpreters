@@ -24,12 +24,12 @@ use std::slice::Iter;
 
 #[derive(Debug)]
 pub enum Expr {
-    Binary(Box<Expr>, TokenType, Box<Expr>),
-    Unary(TokenType, Box<Expr>),
-    Literal(TokenType),
+    Binary(Box<Expr>, Token, Box<Expr>),
+    Unary(Token, Box<Expr>),
+    Literal(Token),
     Grouping(Box<Expr>),
-    Variable(TokenType),
-    Assign(TokenType, Box<Expr>),
+    Variable(Token),
+    Assign(Token, Box<Expr>),
 }
 
 #[derive(Debug)]
@@ -214,7 +214,7 @@ impl<'a> Parser<'a> {
             self.token_match(&[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL])
         {
             let right = self.comparison();
-            expr = Expr::Binary(Box::new(expr), operator.token_type.clone(), Box::new(right));
+            expr = Expr::Binary(Box::new(expr), operator.clone(), Box::new(right));
         }
         expr
     }
@@ -228,7 +228,7 @@ impl<'a> Parser<'a> {
             TokenType::LESS_EQUAL,
         ]) {
             let right = self.comparison();
-            expr = Expr::Binary(Box::new(expr), operator.token_type.clone(), Box::new(right));
+            expr = Expr::Binary(Box::new(expr), operator.clone(), Box::new(right));
         }
         expr
     }
@@ -237,7 +237,7 @@ impl<'a> Parser<'a> {
         let mut expr: Expr = self.factor();
         while let Some(operator) = self.token_match(&[TokenType::PLUS, TokenType::MINUS]) {
             let right = self.comparison();
-            expr = Expr::Binary(Box::new(expr), operator.token_type.clone(), Box::new(right));
+            expr = Expr::Binary(Box::new(expr), operator.clone(), Box::new(right));
         }
         expr
     }
@@ -246,7 +246,7 @@ impl<'a> Parser<'a> {
         let mut expr: Expr = self.unary();
         while let Some(operator) = self.token_match(&[TokenType::STAR, TokenType::SLASH]) {
             let right = self.comparison();
-            expr = Expr::Binary(Box::new(expr), operator.token_type.clone(), Box::new(right));
+            expr = Expr::Binary(Box::new(expr), operator.clone(), Box::new(right));
         }
         expr
     }
@@ -254,7 +254,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Expr {
         if let Some(operator) = self.token_match(&[TokenType::BANG, TokenType::MINUS]) {
             let right = self.unary();
-            Expr::Unary(operator.token_type.clone(), Box::new(right))
+            Expr::Unary(operator.clone(), Box::new(right))
         } else {
             self.primary()
         }
@@ -267,12 +267,11 @@ impl<'a> Parser<'a> {
             line: -1,
         });
         match &cur_token.token_type {
-            TokenType::FALSE => Expr::Literal(TokenType::FALSE),
-            TokenType::TRUE => Expr::Literal(TokenType::TRUE),
-            TokenType::NIL => Expr::Literal(TokenType::NIL),
-
-            TokenType::STRING(lit_val) => Expr::Literal(TokenType::STRING(lit_val.clone())),
-            TokenType::NUMBER(lit_val) => Expr::Literal(TokenType::NUMBER(*lit_val)),
+            TokenType::EOF | TokenType::FALSE | TokenType::TRUE | TokenType::NIL => {
+                Expr::Literal(cur_token.clone())
+            }
+            TokenType::STRING(_lit_str_val) => Expr::Literal(cur_token.clone()),
+            TokenType::NUMBER(_lit_num_val) => Expr::Literal(cur_token.clone()),
 
             TokenType::LEFT_PAREN => {
                 let expr: Expr = self.expression();
@@ -283,9 +282,7 @@ impl<'a> Parser<'a> {
                 Expr::Grouping(Box::new(expr))
             }
 
-            TokenType::EOF => Expr::Literal(TokenType::EOF),
-
-            TokenType::IDENTIFIER(name) => Expr::Variable(TokenType::IDENTIFIER(name.to_string())),
+            TokenType::IDENTIFIER(name) => Expr::Variable(cur_token.clone()),
 
             _ => {
                 // TODO: Report error

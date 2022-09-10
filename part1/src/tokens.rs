@@ -16,6 +16,11 @@ impl Default for Token {
         }
     }
 }
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} on line {}", &self.token_type, &self.line)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
