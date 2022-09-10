@@ -1,10 +1,11 @@
 use std::fmt;
+use std::fmt::{Debug, Display};
 
 use crate::environment::Enviornment;
 use crate::parser::{Expr, Stmt};
 use crate::tokens::{Token, TokenType};
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::{anyhow, Context};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Object {
@@ -12,6 +13,16 @@ pub enum Object {
     Boolean(bool),
     Double(f64),
     String(String),
+}
+
+#[derive(Debug)]
+pub struct LoxRuntimeError {
+    t: Token,
+}
+impl Display for LoxRuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.t)
+    }
 }
 
 impl fmt::Display for Object {
@@ -48,7 +59,7 @@ impl Interpreter {
         match (&t.token_type, right) {
             (TokenType::MINUS, Object::Double(x)) => Ok(Object::Double(-x)),
             (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(o))),
-            _ => Err(anyhow!("oopsies, bad unary")),
+            _ => Err(anyhow!("oopsies, bad unary")).context(LoxRuntimeError { t: t.clone() }),
         }
     }
 
@@ -78,7 +89,8 @@ impl Interpreter {
             (l, TokenType::EQUAL_EQUAL, r) => Ok(Object::Boolean(l == r)),
             (l, TokenType::BANG_EQUAL, r) => Ok(Object::Boolean(l != r)),
 
-            (l, t, r) => Err(anyhow!("Bad binary expr '{:?}' '{}' '{:?}'", l, t, r)),
+            (l, tt, r) => Err(anyhow!("Bad binary expr '{:?}' '{}' '{:?}'", l, tt, r))
+                .context(LoxRuntimeError { t: t.clone() }),
         }
     }
 
@@ -90,7 +102,8 @@ impl Interpreter {
             TokenType::STRING(s) => Ok(Object::String(s.clone())),
             TokenType::NIL => Ok(Object::Nil),
             TokenType::EOF => Ok(Object::Nil), // ?
-            _ => Err(anyhow!("oopsies, unexpected literal '{:?}'", t)),
+            _ => Err(anyhow!("oopsies, unexpected literal '{:?}'", t.token_type))
+                .context(LoxRuntimeError { t: t.clone() }),
         }
     }
 
@@ -107,7 +120,7 @@ impl Interpreter {
             Expr::Variable(n) => {
                 if let TokenType::IDENTIFIER(name) = &n.token_type {
                     // FIXME: handle unseen symbol WRT unwarp
-                    self.env.get(name)
+                    self.env.get(name).context(LoxRuntimeError { t: n.clone() })
                 } else {
                     Ok(Object::Nil)
                 }
@@ -115,7 +128,9 @@ impl Interpreter {
             Expr::Assign(n, v) => {
                 let val = self.evaluate(v)?;
                 if let TokenType::IDENTIFIER(name) = &n.token_type {
-                    self.env.assign(name.to_string(), val)?;
+                    self.env
+                        .assign(name.to_string(), val)
+                        .context(LoxRuntimeError { t: n.clone() })?;
                     self.env.get(name)
                 } else {
                     Ok(Object::Nil)

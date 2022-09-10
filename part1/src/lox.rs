@@ -1,4 +1,4 @@
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Interpreter, LoxRuntimeError};
 use crate::lox_error::LoxError;
 use crate::parser;
 use crate::scanner;
@@ -23,7 +23,7 @@ impl Lox {
 
     pub fn run(&mut self, source: String) -> Result<()> {
         let tokens = scanner::scan_tokens(self, &source);
-        println!("Tokens: {:#?}", tokens);
+        // println!("Tokens: {:#?}", tokens);
         if self.check_err().is_err() {
             ::std::process::exit(65);
         }
@@ -39,11 +39,15 @@ impl Lox {
             ::std::process::exit(65);
         }
         let mut interpreter = Interpreter::new();
-        let _rte = interpreter.interpret(&ast);
-
-        if self.check_err().is_err() {
+        let rte = interpreter.interpret(&ast);
+        println!("{:?}", rte);
+        if let Err(err) = rte {
+            if let Some(e) = err.downcast_ref::<LoxRuntimeError>() {
+                println!("{}", e);
+            }
             ::std::process::exit(70);
         }
+
         self.check_err()
     }
 }
