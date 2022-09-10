@@ -22,7 +22,7 @@ pub struct LoxRuntimeError {
 }
 impl Display for LoxRuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}.\n   at line {}", self.message, self.t.line)
+        write!(f, "{}.\n[line {}]", self.message, self.t.line)
     }
 }
 

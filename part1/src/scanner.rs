@@ -5,7 +5,7 @@ use itertools::peek_nth;
 
 pub fn scan_tokens(lox: &mut dyn LoxError, source: &str) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
-    let mut line = 1;
+    let mut line = 0;
     let mut chars = peek_nth(source.chars());
 
     while let Some(c) = chars.next() {
@@ -174,8 +174,8 @@ pub fn scan_tokens(lox: &mut dyn LoxError, source: &str) -> Result<Vec<Token>> {
                 }
             }
             c => {
-                lox.error(line, &format!("Unexpected character {:?}.", c));
-                // return Err(anyhow::anyhow!("oops"));
+                // lox.error(line, &format!("Unexpected character {:?}.", c));
+                lox.error(line, "Unexpected character.");
             }
         }
     }

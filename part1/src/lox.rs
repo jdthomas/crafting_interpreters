@@ -52,7 +52,7 @@ impl Lox {
         }
         let mut interpreter = Interpreter::new_with_env(env);
         let rte = interpreter.interpret(&ast);
-        println!("{:?}", rte);
+        // println!("{:?}", rte);
         if let Err(err) = &rte {
             if let Some(e) = err.downcast_ref::<LoxRuntimeError>() {
                 eprintln!("{}", e);

@@ -75,16 +75,20 @@ impl Test {
                 test.expectedExitCode = 65;
             }
 
-            if let Some(_ee) = errorLinePattern.captures(&line) {
+            if let Some(ee) = errorLinePattern.captures(&line) {
                 // The two interpreters are slightly different in terms of which
                 // cascaded errors may appear after an initial compile error because
                 // their panic mode recovery is a little different. To handle that,
                 // the tests can indicate if an error line should only appear for a
                 // certain interpreter.
+
                 //   var language = match[2];
                 //   if (language == null || language == _suite.language) {
-                //     _expectedErrors.add("[${match[3]}] ${match[4]}");
-
+                if ee.get(2).is_none() {
+                    test.expectedErrors
+                        .push(format!("[line {}] {}", &ee[3], &ee[4]));
+                    test.expectedExitCode = 65;
+                }
                 //     // If we expect a compile error, it should exit with EX_DATAERR.
                 //     _expectedExitCode = 65;
                 //     _expectations++;
@@ -113,12 +117,13 @@ impl Test {
         }
     }
     fn validate_runtime_error(&self, std_err: &Vec<String>) -> Result<()> {
-        // if (errorLines.length < 2) {
-        //     fail("Expected runtime error '$_expectedRuntimeError' and got none.");
-        //     return;
-        //  }
-
         if let Some(expected_runtime_error) = &self.expectedRuntimeError {
+            // if std_err.len() < 2 {
+            //     return Err(anyhow!(
+            //         "Expected runtime error '{:?}' and got none.",
+            //         self.expectedRuntimeError
+            //     ));
+            // }
             if std_err[0] != expected_runtime_error.output {
                 return Err(anyhow!(
                     "Expected runtime error '{}' and got:\n{}",
@@ -126,74 +131,77 @@ impl Test {
                     std_err[0]
                 ));
             }
+            // Make sure the stack trace has the right line.
+            let matching = std_err[1..]
+                .iter()
+                .find(|line| stackTracePattern.is_match(line));
+            if let Some(stack) = matching {
+                let captured = stackTracePattern.captures(stack);
+                let stack_line = captured.unwrap()[1].parse::<i32>().unwrap();
+                if stack_line != expected_runtime_error.line {
+                    return Err(anyhow!(
+                        "Expected runtime error on line {} but was on line {}",
+                        expected_runtime_error.line,
+                        stack_line
+                    ));
+                }
+            } else {
+                //     fail("Expected stack trace and got:", stackLines);
+                return Err(anyhow!("Expected stack trace and got: {:?}", &std_err[1..]));
+            }
         }
-
-        //   // Make sure the stack trace has the right line.
-        //   RegExpMatch match;
-        //   var stackLines = errorLines.sublist(1);
-        //   for (var line in stackLines) {
-        //     match = _stackTracePattern.firstMatch(line);
-        //     if (match != null) break;
-        //   }
-
-        //   if (match == null) {
-        //     fail("Expected stack trace and got:", stackLines);
-        //   } else {
-        //     var stackLine = int.parse(match[1]);
-        //     if (stackLine != _runtimeErrorLine) {
-        //       fail("Expected runtime error on line $_runtimeErrorLine "
-        //           "but was on line $stackLine.");
-        //     }
-        //   }
         Ok(())
     }
 
     fn validate_compile_errors(&self, std_err: &Vec<String>) -> Result<()> {
-        // let matching = zip(&self.expectedErrors, std_err)
-        //     .filter(|&(a, b)| a == b)
-        //     .count();
-        // println!("{:?} {:?} {}", &self.expectedErrors, std_err, matching );
-        // if matching == std_err.len() && matching == self.expectedErrors.len() {
-        //     Ok(())
-        // } else {
-        //     Err(anyhow!("boop"))
-        // }
+        if self.expectedErrors.len() > 0 {
+            let matching = zip(&self.expectedErrors, std_err)
+                .filter(|&(a, b)| a == b)
+                .count();
+            println!("{:?} {:?} {}", &self.expectedErrors, std_err, matching);
+            if matching == std_err.len() && matching == self.expectedErrors.len() {
+                Ok(())
+            } else {
+                Err(anyhow!("Compliation Error"))
+            }
+            // // Validate that every compile error was expected.
+            // var foundErrors = <String>{};
+            // var unexpectedCount = 0;
+            // for (var line in error_lines) {
+            // var match = _syntaxErrorPattern.firstMatch(line);
+            // if (match != null) {
+            //     var error = "[${match[1]}] ${match[2]}";
+            //     if (_expectedErrors.contains(error)) {
+            //     foundErrors.add(error);
+            //     } else {
+            //     if (unexpectedCount < 10) {
+            //         fail("Unexpected error:");
+            //         fail(line);
+            //     }
+            //     unexpectedCount++;
+            //     }
+            // } else if (line != "") {
+            //     if (unexpectedCount < 10) {
+            //     fail("Unexpected output on stderr:");
+            //     fail(line);
+            //     }
+            //     unexpectedCount++;
+            // }
+            // }
 
-        // // Validate that every compile error was expected.
-        // var foundErrors = <String>{};
-        // var unexpectedCount = 0;
-        // for (var line in error_lines) {
-        // var match = _syntaxErrorPattern.firstMatch(line);
-        // if (match != null) {
-        //     var error = "[${match[1]}] ${match[2]}";
-        //     if (_expectedErrors.contains(error)) {
-        //     foundErrors.add(error);
-        //     } else {
-        //     if (unexpectedCount < 10) {
-        //         fail("Unexpected error:");
-        //         fail(line);
-        //     }
-        //     unexpectedCount++;
-        //     }
-        // } else if (line != "") {
-        //     if (unexpectedCount < 10) {
-        //     fail("Unexpected output on stderr:");
-        //     fail(line);
-        //     }
-        //     unexpectedCount++;
-        // }
-        // }
+            // if (unexpectedCount > 10) {
+            // fail("(truncated ${unexpectedCount - 10} more...)");
+            // }
 
-        // if (unexpectedCount > 10) {
-        // fail("(truncated ${unexpectedCount - 10} more...)");
-        // }
-
-        // // Validate that every expected error occurred.
-        // for (var error in _expectedErrors.difference(foundErrors)) {
-        // fail("Missing expected error: $error");
-        // }
-        Ok(())
+            // // Validate that every expected error occurred.
+            // for (var error in _expectedErrors.difference(foundErrors)) {
+            // fail("Missing expected error: $error");
+            // }
+        } else {
+            Ok(())
+        }
     }
+
     fn validate_exit_code(&self, exit_code: i32) -> Result<()> {
         if exit_code == self.expectedExitCode {
             Ok(())
