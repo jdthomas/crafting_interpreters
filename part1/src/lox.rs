@@ -64,6 +64,12 @@ impl Lox {
     }
 }
 
+impl Default for Lox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoxError for Lox {
     fn error(&mut self, line: i32, message: &str) {
         self.report(line, "", message);

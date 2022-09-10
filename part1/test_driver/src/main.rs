@@ -1,14 +1,10 @@
 use anyhow::anyhow;
-use anyhow::Context;
 use anyhow::Result;
 use clap::Parser;
 use colored::*;
 use itertools::zip;
 use lazy_static::lazy_static;
-use lib::lox::Lox;
 use regex::Regex;
-use std::convert::TryFrom;
-use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
@@ -17,15 +13,15 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 lazy_static! {
-    static ref expectedOutputPattern: Regex = Regex::new(r"// expect: ?(.*)").unwrap();
-    static ref expectedErrorPattern: Regex = Regex::new(r"// (Error.*)").unwrap();
-    static ref errorLinePattern: Regex =
+    static ref EXPECTED_OUTPUT_PATTERN: Regex = Regex::new(r"// expect: ?(.*)").unwrap();
+    static ref EXPECTED_ERROR_PATTERN: Regex = Regex::new(r"// (Error.*)").unwrap();
+    static ref ERROR_LINE_PATTERN: Regex =
         Regex::new(r"// \[((java|c) )?line (\d+)\] (Error.*)").unwrap();
-    static ref expectedRuntimeErrorPattern: Regex =
+    static ref EXPECTED_RUNTIME_ERROR_PATTERN: Regex =
         Regex::new(r"// expect runtime error: (.+)").unwrap();
-    static ref syntaxErrorPattern: Regex = Regex::new(r"\[.*line (\d+)\] (Error.+)").unwrap();
-    static ref stackTracePattern: Regex = Regex::new(r"\[line (\d+)\]").unwrap();
-    static ref nonTestPattern: Regex = Regex::new(r"// nontest").unwrap();
+    static ref SYNTAX_ERROR_PATTERN: Regex = Regex::new(r"\[.*line (\d+)\] (Error.+)").unwrap();
+    static ref STACK_TRRACE_PATTERN: Regex = Regex::new(r"\[line (\d+)\]").unwrap();
+    static ref NON_TEST_PATTERN: Regex = Regex::new(r"// nontest").unwrap();
 }
 
 #[derive(Debug)]
@@ -37,45 +33,46 @@ struct ExpectedOutput {
 #[derive(Debug)]
 struct Test {
     test_file: PathBuf,
-    expectedOutput: Vec<ExpectedOutput>,
+    expected_output: Vec<ExpectedOutput>,
     /// The set of expected compile error messages.
-    expectedErrors: Vec<String>,
+    expected_errors: Vec<String>,
     /// The expected runtime error message or `None` if there should not be one.
-    expectedRuntimeError: Option<ExpectedOutput>,
-    expectedExitCode: i32,
+    expected_runtime_error: Option<ExpectedOutput>,
+    expected_exit_code: i32,
 }
 
 impl Test {
     fn try_parse(test_input_path: &PathBuf) -> Option<Self> {
-        // let mut expectedOutput: Vec<ExpectedOutput> = vec![];
-        // let mut expectedErrors: Vec<String> = vec![];
-        // let mut expectedExitCode: i32 = 0;
-        // let mut expectedRuntimeError: Option<ExpectedOutput> = None;
+        // let mut expected_output: Vec<ExpectedOutput> = vec![];
+        // let mut expected_errors: Vec<String> = vec![];
+        // let mut expected_exit_code: i32 = 0;
+        // let mut expected_runtime_error: Option<ExpectedOutput> = None;
         let mut test = Test {
             test_file: test_input_path.clone(),
-            expectedOutput: vec![],
-            expectedErrors: vec![],
-            expectedExitCode: 0,
-            expectedRuntimeError: None,
+            expected_output: vec![],
+            expected_errors: vec![],
+            expected_exit_code: 0,
+            expected_runtime_error: None,
         };
         let file = File::open(test_input_path).ok()?;
         let lines = io::BufReader::new(file).lines();
         lines.enumerate().for_each(|(lineno, line)| {
             let line = line.unwrap(); // FIXME
-            if let Some(eo) = expectedOutputPattern.captures(&line) {
-                test.expectedOutput.push(ExpectedOutput {
+            if let Some(eo) = EXPECTED_OUTPUT_PATTERN.captures(&line) {
+                test.expected_output.push(ExpectedOutput {
                     line: lineno as i32,
                     output: eo[1].to_string(),
                 });
             }
 
-            if let Some(ee) = expectedOutputPattern.captures(&line) {
-                test.expectedErrors.push(format!("[{}] {}", lineno, &ee[1]));
+            if let Some(ee) = EXPECTED_ERROR_PATTERN.captures(&line) {
+                test.expected_errors
+                    .push(format!("[{}] {}", lineno, &ee[1]));
                 // If we expect a compile error, it should exit with EX_DATAERR.
-                test.expectedExitCode = 65;
+                test.expected_exit_code = 65;
             }
 
-            if let Some(ee) = errorLinePattern.captures(&line) {
+            if let Some(ee) = ERROR_LINE_PATTERN.captures(&line) {
                 // The two interpreters are slightly different in terms of which
                 // cascaded errors may appear after an initial compile error because
                 // their panic mode recovery is a little different. To handle that,
@@ -85,27 +82,27 @@ impl Test {
                 //   var language = match[2];
                 //   if (language == null || language == _suite.language) {
                 if ee.get(2).is_none() {
-                    test.expectedErrors
+                    test.expected_errors
                         .push(format!("[line {}] {}", &ee[3], &ee[4]));
-                    test.expectedExitCode = 65;
+                    test.expected_exit_code = 65;
                 }
                 //     // If we expect a compile error, it should exit with EX_DATAERR.
-                //     _expectedExitCode = 65;
+                //     _expected_exit_code = 65;
                 //     _expectations++;
                 //   }
                 //   continue;
             }
-            if let Some(rte) = expectedRuntimeErrorPattern.captures(&line) {
-                test.expectedRuntimeError = Some(ExpectedOutput {
+            if let Some(rte) = EXPECTED_RUNTIME_ERROR_PATTERN.captures(&line) {
+                test.expected_runtime_error = Some(ExpectedOutput {
                     line: lineno as i32,
                     output: rte[1].to_owned(),
                 });
                 // If we expect a runtime error, it should exit with EX_SOFTWARE.
-                test.expectedExitCode = 70;
+                test.expected_exit_code = 70;
             }
         });
 
-        if test.expectedErrors.len() > 0 && test.expectedRuntimeError.is_some() {
+        if !test.expected_errors.is_empty() && test.expected_runtime_error.is_some() {
             println!(
                 "{} {} Cannot expect both compile and runtime errors.",
                 "TEST ERROR".magenta(),
@@ -116,12 +113,12 @@ impl Test {
             Some(test)
         }
     }
-    fn validate_runtime_error(&self, std_err: &Vec<String>) -> Result<()> {
-        if let Some(expected_runtime_error) = &self.expectedRuntimeError {
+    fn validate_runtime_error(&self, std_err: &[String]) -> Result<()> {
+        if let Some(expected_runtime_error) = &self.expected_runtime_error {
             // if std_err.len() < 2 {
             //     return Err(anyhow!(
             //         "Expected runtime error '{:?}' and got none.",
-            //         self.expectedRuntimeError
+            //         self.expected_runtime_error
             //     ));
             // }
             if std_err[0] != expected_runtime_error.output {
@@ -134,9 +131,9 @@ impl Test {
             // Make sure the stack trace has the right line.
             let matching = std_err[1..]
                 .iter()
-                .find(|line| stackTracePattern.is_match(line));
+                .find(|line| STACK_TRRACE_PATTERN.is_match(line));
             if let Some(stack) = matching {
-                let captured = stackTracePattern.captures(stack);
+                let captured = STACK_TRRACE_PATTERN.captures(stack);
                 let stack_line = captured.unwrap()[1].parse::<i32>().unwrap();
                 if stack_line != expected_runtime_error.line {
                     return Err(anyhow!(
@@ -154,12 +151,12 @@ impl Test {
     }
 
     fn validate_compile_errors(&self, std_err: &Vec<String>) -> Result<()> {
-        if self.expectedErrors.len() > 0 {
-            let matching = zip(&self.expectedErrors, std_err)
+        if !self.expected_errors.is_empty() {
+            let matching = zip(&self.expected_errors, std_err)
                 .filter(|&(a, b)| a == b)
                 .count();
-            println!("{:?} {:?} {}", &self.expectedErrors, std_err, matching);
-            if matching == std_err.len() && matching == self.expectedErrors.len() {
+            println!("{:?} {:?} {}", &self.expected_errors, std_err, matching);
+            if matching == std_err.len() && matching == self.expected_errors.len() {
                 Ok(())
             } else {
                 Err(anyhow!("Compliation Error"))
@@ -168,10 +165,10 @@ impl Test {
             // var foundErrors = <String>{};
             // var unexpectedCount = 0;
             // for (var line in error_lines) {
-            // var match = _syntaxErrorPattern.firstMatch(line);
+            // var match = _syntax_error_pattern.firstMatch(line);
             // if (match != null) {
             //     var error = "[${match[1]}] ${match[2]}";
-            //     if (_expectedErrors.contains(error)) {
+            //     if (_expected_errors.contains(error)) {
             //     foundErrors.add(error);
             //     } else {
             //     if (unexpectedCount < 10) {
@@ -194,7 +191,7 @@ impl Test {
             // }
 
             // // Validate that every expected error occurred.
-            // for (var error in _expectedErrors.difference(foundErrors)) {
+            // for (var error in _expected_errors.difference(foundErrors)) {
             // fail("Missing expected error: $error");
             // }
         } else {
@@ -203,17 +200,17 @@ impl Test {
     }
 
     fn validate_exit_code(&self, exit_code: i32) -> Result<()> {
-        if exit_code == self.expectedExitCode {
+        if exit_code == self.expected_exit_code {
             Ok(())
         } else {
             Err(anyhow!(
                 "Expected return code {} and got {}",
-                self.expectedExitCode,
+                self.expected_exit_code,
                 exit_code
             ))
         }
     }
-    fn validate_output(&self, std_out: &Vec<String>) -> Result<()> {
+    fn validate_output(&self, _std_out: &[String]) -> Result<()> {
         Ok(())
     }
 }
@@ -235,17 +232,17 @@ fn run_test(test: Test, prog: &str) -> Result<()> {
     let _skipped: u32 = 0;
 
     // Update the status line.
-    println!(
-        "Passed: {} Failed: {} Skipped: {} ({})",
-        _passed.to_string().green(),
-        _failed.to_string().red(),
-        _skipped.to_string().yellow(),
-        test_input_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap(), //.into_os_string().into_string().context("")?.dimmed(),
-    );
+    // println!(
+    //     "Passed: {} Failed: {} Skipped: {} ({})",
+    //     _passed.to_string().green(),
+    //     _failed.to_string().red(),
+    //     _skipped.to_string().yellow(),
+    //     test_input_path
+    //         .clone()
+    //         .into_os_string()
+    //         .into_string()
+    //         .unwrap(), //.into_os_string().into_string().context("")?.dimmed(),
+    // );
 
     let mut process = Command::new(prog)
         .args(&[test_input_path])
@@ -285,9 +282,9 @@ fn run_test(test: Test, prog: &str) -> Result<()> {
     //   }
     //   print("");
     // }
-    // assert_eq!(exit_code, test.expectedExitCode);
-    // assert_eq!(output_lines, test.expectedOutput);
-    // println!("{:?}", zip(output_lines, test.expectedOutput));
+    // assert_eq!(exit_code, test.expected_exit_code);
+    // assert_eq!(output_lines, test.expected_output);
+    // println!("{:?}", zip(output_lines, test.expected_output));
 
     Ok(())
 }
@@ -305,7 +302,13 @@ fn main() -> Result<()> {
     // let test_input = "test_lox_files/0005_presidence.lox";
     let test_input = args.input_file;
     let test_binary = "target/debug/interpreter";
-    let test = Test::try_parse(&PathBuf::from(test_input));
+    let test = Test::try_parse(&PathBuf::from(&test_input));
     println!("test: {:#?}", test);
-    run_test(test.unwrap(), test_binary)
+    let e = run_test(test.unwrap(), test_binary);
+    match e {
+        Ok(_) => println!("[{}] ({})", "PASSED".green(), &test_input),
+
+        Err(_) => println!("[{}] ({})", "FAILED".red(), &test_input),
+    };
+    e
 }

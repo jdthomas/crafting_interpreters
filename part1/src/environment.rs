@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::default::Default;
 
 use crate::interpreter::Object;
-use anyhow::anyhow;
 use anyhow::Result;
 
 pub struct Enviornment {

@@ -173,7 +173,7 @@ pub fn scan_tokens(lox: &mut dyn LoxError, source: &str) -> Result<Vec<Token>> {
                     });
                 }
             }
-            c => {
+            _c => {
                 // lox.error(line, &format!("Unexpected character {:?}.", c));
                 lox.error(line, "Unexpected character.");
             }

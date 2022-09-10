@@ -282,7 +282,7 @@ impl<'a> Parser<'a> {
                 Expr::Grouping(Box::new(expr))
             }
 
-            TokenType::IDENTIFIER(name) => Expr::Variable(cur_token.clone()),
+            TokenType::IDENTIFIER(_name) => Expr::Variable(cur_token.clone()),
 
             _ => {
                 // TODO: Report error

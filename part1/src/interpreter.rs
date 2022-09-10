@@ -162,9 +162,13 @@ impl<'a> Interpreter<'a> {
 
     pub fn execute(&mut self, ast: &Stmt) -> Result<()> {
         match ast {
-            Stmt::Print(e) => println!("{}", self.evaluate(e)?),
+            Stmt::Print(e) => {
+                println!("{}", self.evaluate(e)?);
+                Ok(())
+            }
             Stmt::Expr(e) => {
-                let _ = self.evaluate(e)?;
+                self.evaluate(e)?;
+                Ok(())
             }
             Stmt::Var(name, e) => {
                 if let Some(expr) = e {
@@ -173,16 +177,19 @@ impl<'a> Interpreter<'a> {
                 } else {
                     self.env.define(name.clone(), Object::Nil)
                 }
+                Ok(())
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
-                stmts.iter().for_each(|s| {
-                    self.execute(s);
-                });
+                let result: Result<()> = stmts
+                    .iter()
+                    .map(|s| -> Result<()> { self.execute(s) })
+                    .into_iter()
+                    .collect();
                 self.env.pop_scope();
+                result
             }
         }
-        Ok(())
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<()> {
