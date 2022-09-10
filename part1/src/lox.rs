@@ -1,3 +1,4 @@
+use crate::environment::Enviornment;
 use crate::interpreter::Interpreter;
 use crate::lox_error::LoxError;
 use crate::parser;
@@ -30,13 +31,16 @@ impl Lox {
     }
 
     pub fn run(&mut self, source: String) -> Result<()> {
+        self.run_with_env(source, &mut Enviornment::new())
+    }
+
+    pub fn run_with_env(&mut self, source: String, env: &mut Enviornment) -> Result<()> {
         let tokens = scanner::scan_tokens(self, &source);
         // println!("Tokens: {:#?}", tokens);
         if self.check_err().is_err() {
             return Err(anyhow!("failed to scan")).context(LoxScanError {});
         }
 
-        // parser::parse(&mut tokens?.iter().peekable())?;
         let tok = tokens?;
         let mut tok = tok.iter().peekable();
         let mut parser = parser::Parser::new(&mut tok, self);
@@ -46,7 +50,7 @@ impl Lox {
         if self.check_err().is_err() {
             return Err(anyhow!("failed to scan")).context(LoxParseError {});
         }
-        let mut interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::new_with_env(env);
         let rte = interpreter.interpret(&ast);
         println!("{:?}", rte);
         if let Err(err) = &rte {

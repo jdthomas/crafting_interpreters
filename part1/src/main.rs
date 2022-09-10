@@ -1,6 +1,7 @@
 use anyhow::Context;
 use anyhow::Result;
 use clap::Parser;
+use lib::environment::Enviornment;
 use lib::lox::Lox;
 use lib::lox::LoxParseError;
 use lib::lox::LoxRuntimeError;
@@ -29,12 +30,13 @@ fn run_prompt() -> Result<()> {
     let buffer = BufReader::new(io::stdin());
     let input_iter = buffer.lines();
     let mut l = Lox::new();
+    let mut env = Enviornment::new();
     println!("> ");
 
     for line in input_iter {
         // ...
         // FIXME: Don;t bail on bad line and reset l.has_error between
-        l.run(line?)?;
+        l.run_with_env(line?, &mut env)?;
         println!("> ");
     }
 

@@ -45,15 +45,18 @@ pub fn truthy(o: Object) -> bool {
     }
 }
 
-pub struct Interpreter {
-    pub env: Enviornment,
+pub struct Interpreter<'a> {
+    pub env: &'a mut Enviornment,
 }
 
-impl Interpreter {
-    pub fn new() -> Self {
-        Interpreter {
-            env: Enviornment::new(),
-        }
+impl<'a> Interpreter<'a> {
+    // pub fn new() -> Self {
+    //     Interpreter {
+    //         env: &mut Enviornment::new(),
+    //     }
+    // }
+    pub fn new_with_env(env: &'a mut Enviornment) -> Self {
+        Interpreter { env }
     }
     pub fn evaluate_unary(&mut self, t: &Token, e: &Expr) -> Result<Object> {
         let right = self.evaluate(e)?;
