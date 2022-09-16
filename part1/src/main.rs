@@ -5,10 +5,9 @@ use lib::lox::Lox;
 use lib::lox::LoxParseError;
 use lib::lox::LoxRuntimeError;
 use lib::lox::LoxScanError;
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 use std::fs;
-use std::io;
-use std::io::BufRead;
-use std::io::BufReader;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -26,18 +25,38 @@ fn run_file(script_path: &str) -> Result<()> {
 }
 
 fn run_prompt() -> Result<()> {
-    let buffer = BufReader::new(io::stdin());
-    let input_iter = buffer.lines();
     let mut l = Lox::new();
     let mut env = Enviornment::new();
-    println!("> ");
+    const HISTORY_FILE: &str = "history.txt";
 
-    for line in input_iter {
-        // ...
-        // FIXME: Don;t bail on bad line and reset l.has_error between
-        l.run_with_env(line?, &mut env)?;
-        println!("> ");
+    let mut rl = Editor::<()>::new()?;
+    if rl.load_history(HISTORY_FILE).is_err() {
+        println!("No privious history");
     }
+
+    loop {
+        let readline = rl.readline("> ");
+        match readline {
+            Ok(line) => {
+                l.run_with_env(line, &mut env)?;
+                // ...
+                // FIXME: Don;t bail on bad line and reset l.has_error between
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break;
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
+            }
+        }
+    }
+    rl.save_history(HISTORY_FILE)?;
 
     Ok(())
 }
