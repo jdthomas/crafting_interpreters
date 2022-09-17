@@ -209,6 +209,12 @@ impl<'a> Interpreter<'a> {
                     Ok(())
                 }
             }
+            Stmt::While(c, s) => {
+                while truthy(&self.evaluate(c)?) {
+                    self.execute(s)?;
+                }
+                Ok(())
+            }
         }
     }
 

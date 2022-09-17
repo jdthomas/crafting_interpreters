@@ -1,20 +1,3 @@
-// Lox Grammar
-// program        → statement* EOF ;
-// statement      → exprStmt
-//                | printStmt ;
-// exprStmt       → expression ";" ;
-// printStmt      → "print" expression ";" ;
-
-// expression     → equality ;
-// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-// term           → factor ( ( "-" | "+" ) factor )* ;
-// factor         → unary ( ( "/" | "*" ) unary )* ;
-// unary          → ( "!" | "-" ) unary
-//                | primary ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil"
-//                | "(" expression ")" ;
-
 use crate::lox_error::LoxError;
 use crate::tokens::{Token, TokenType};
 use anyhow::anyhow;
@@ -42,6 +25,7 @@ pub enum Stmt {
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
 }
 
 impl fmt::Display for Expr {
@@ -75,6 +59,7 @@ impl fmt::Display for Stmt {
             Self::Var(n, None) => write!(f, "{}", n),
             Self::Block(stmts) => write!(f, "{:?}", stmts),
             Self::If(c, t, e) => write!(f, "{} {} {:?}", c, t, e),
+            Self::While(c, s) => write!(f, "{} {}", c, s),
         }
     }
 }
@@ -151,10 +136,84 @@ impl<'a> Parser<'a> {
         let cur_token = self.tokens.peek().unwrap();
         match cur_token.token_type {
             TokenType::PRINT => self.print_statement(),
+            TokenType::WHILE => self.while_statement(),
+            TokenType::FOR => self.for_statement(),
             TokenType::IF => self.if_statement(),
             TokenType::LEFT_BRACE => self.block(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn for_statement(&mut self) -> Result<Stmt> {
+        self.tokens.next(); // consume FOR
+        if self.token_match(&[TokenType::LEFT_PAREN]).is_none() {
+            // FIXME:
+            return Err(anyhow!("expected lparen"));
+        }
+        let cur_token = self.tokens.peek().unwrap();
+        let initilizer = if cur_token.token_type == TokenType::SEMICOLON {
+            self.tokens.next();
+            None
+        } else if cur_token.token_type == TokenType::VAR {
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        let cur_token = self.tokens.peek().unwrap();
+
+        let condition = if cur_token.token_type == TokenType::SEMICOLON {
+            None
+        } else {
+            Some(self.expression())
+        };
+
+        if self.token_match(&[TokenType::SEMICOLON]).is_none() {
+            // FIXME:
+            return Err(anyhow!("Expect ';' after loop condition."));
+        }
+
+        let cur_token = self.tokens.peek().unwrap();
+        let increment = if cur_token.token_type == TokenType::RIGHT_PAREN {
+            None
+        } else {
+            Some(self.expression())
+        };
+
+        if self.token_match(&[TokenType::RIGHT_PAREN]).is_none() {
+            // FIXME:
+            return Err(anyhow!("Expect ')' after for clauses."));
+        }
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Stmt::Block(vec![body, Stmt::Expr(increment)])
+        }
+        if let Some(condition) = condition {
+            body = Stmt::While(condition, Box::new(body));
+        }
+        if let Some(initilizer) = initilizer {
+            body = Stmt::Block(vec![initilizer, body]);
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt> {
+        self.tokens.next(); // consume WHILE
+        if self.token_match(&[TokenType::LEFT_PAREN]).is_none() {
+            // FIXME:
+            return Err(anyhow!("expected lparen"));
+        }
+        let condition = self.expression();
+        if self.token_match(&[TokenType::RIGHT_PAREN]).is_none() {
+            // FIXME:
+            return Err(anyhow!("expected rparen"));
+        }
+        let body = self.statement()?;
+
+        Ok(Stmt::While(condition, Box::new(body)))
     }
 
     fn if_statement(&mut self) -> Result<Stmt> {
