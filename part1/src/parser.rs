@@ -17,6 +17,8 @@
 
 use crate::lox_error::LoxError;
 use crate::tokens::{Token, TokenType};
+use anyhow::anyhow;
+use anyhow::Result;
 use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
@@ -30,6 +32,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Variable(Token),
     Assign(Token, Box<Expr>),
+    Logical(Box<Expr>, Token, Box<Expr>),
 }
 
 #[derive(Debug)]
@@ -38,6 +41,7 @@ pub enum Stmt {
     Print(Expr),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
 }
 
 impl fmt::Display for Expr {
@@ -55,6 +59,9 @@ impl fmt::Display for Expr {
             Self::Assign(n, v) => {
                 write!(f, "(= {} {})", n, v)
             }
+            Self::Logical(l, o, r) => {
+                write!(f, "{} {} {}", l, o.token_type, r)
+            }
         }
     }
 }
@@ -67,6 +74,7 @@ impl fmt::Display for Stmt {
             Self::Var(n, Some(e)) => write!(f, "{} = {}", n, e),
             Self::Var(n, None) => write!(f, "{}", n),
             Self::Block(stmts) => write!(f, "{:?}", stmts),
+            Self::If(c, t, e) => write!(f, "{} {} {:?}", c, t, e),
         }
     }
 }
@@ -82,7 +90,7 @@ impl<'a> Parser<'a> {
         Self { tokens, lox }
     }
 
-    pub fn parse(&mut self) -> Vec<Stmt> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut statements = vec![];
         loop {
             let cur_token = self.tokens.peek();
@@ -94,9 +102,9 @@ impl<'a> Parser<'a> {
             if cur_token.token_type == TokenType::EOF {
                 break;
             }
-            statements.push(self.declaration());
+            statements.push(self.declaration()?);
         }
-        statements
+        Ok(statements)
     }
 
     fn token_match(&mut self, t: &[TokenType]) -> Option<&'a Token> {
@@ -108,7 +116,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn declaration(&mut self) -> Stmt {
+    fn declaration(&mut self) -> Result<Stmt> {
         let cur_token = self.tokens.peek().unwrap();
         match cur_token.token_type {
             TokenType::VAR => self.var_declaration(),
@@ -116,7 +124,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn var_declaration(&mut self) -> Stmt {
+    fn var_declaration(&mut self) -> Result<Stmt> {
         self.token_match(&[TokenType::VAR]); // consume VAR
         let cur_token = self.tokens.peek().unwrap();
         if let TokenType::IDENTIFIER(name) = cur_token.token_type.clone() {
@@ -132,23 +140,56 @@ impl<'a> Parser<'a> {
                 // FIXME: report "Expect ';' after expression."
             }
 
-            Stmt::Var(name, initializer)
+            Ok(Stmt::Var(name, initializer))
         } else {
             // Parse error?
             todo!()
         }
     }
 
-    fn statement(&mut self) -> Stmt {
+    fn statement(&mut self) -> Result<Stmt> {
         let cur_token = self.tokens.peek().unwrap();
         match cur_token.token_type {
             TokenType::PRINT => self.print_statement(),
+            TokenType::IF => self.if_statement(),
             TokenType::LEFT_BRACE => self.block(),
             _ => self.expression_statement(),
         }
     }
 
-    fn block(&mut self) -> Stmt {
+    fn if_statement(&mut self) -> Result<Stmt> {
+        self.tokens.next(); // consume IF
+
+        let cur_token = self.tokens.peek().unwrap();
+        if cur_token.token_type == TokenType::LEFT_PAREN {
+            self.tokens.next(); // consume '('
+
+            let condition = self.expression();
+
+            let cur_token = self.tokens.peek().unwrap();
+            if cur_token.token_type != TokenType::RIGHT_PAREN {
+                return Err(anyhow!("expected right paren"));
+            }
+            self.tokens.next(); // consume ')'
+
+            let then_branch = self.statement()?;
+            let else_branch = if let Some(cur_token) = self.tokens.peek() {
+                if cur_token.token_type == TokenType::ELSE {
+                    self.tokens.next(); // consume ELSE
+                    Some(Box::new(self.statement()?))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            return Ok(Stmt::If(condition, Box::new(then_branch), else_branch));
+        }
+        // FIXME: Parse error
+        todo!()
+    }
+
+    fn block(&mut self) -> Result<Stmt> {
         self.tokens.next(); // consume LEFT_BRACE
         let mut statements: Vec<Stmt> = vec![];
         loop {
@@ -156,24 +197,24 @@ impl<'a> Parser<'a> {
             if cur_token.token_type == TokenType::RIGHT_BRACE {
                 break;
             }
-            statements.push(self.declaration());
+            statements.push(self.declaration()?);
         }
 
         self.tokens.next(); // consume(RIGHT_BRACE, "Expect '}' after block.");
-        Stmt::Block(statements)
+        Ok(Stmt::Block(statements))
     }
 
-    fn expression_statement(&mut self) -> Stmt {
+    fn expression_statement(&mut self) -> Result<Stmt> {
         let expr = self.expression();
         if let Some(_t) = self.token_match(&[TokenType::SEMICOLON]) {
         } else {
             // FIXME: report "Expect ';' after expression."
         }
 
-        Stmt::Expr(expr)
+        Ok(Stmt::Expr(expr))
     }
 
-    fn print_statement(&mut self) -> Stmt {
+    fn print_statement(&mut self) -> Result<Stmt> {
         self.token_match(&[TokenType::PRINT]);
         let value = self.expression();
 
@@ -184,15 +225,35 @@ impl<'a> Parser<'a> {
             // "Expect ';' after value.";
             // self.lox.report(cur_token.line, "", "");
         };
-        Stmt::Print(value)
+        Ok(Stmt::Print(value))
     }
 
     fn expression(&mut self) -> Expr {
         self.assignment()
     }
 
+    fn or_expr(&mut self) -> Expr {
+        let mut expr = self.and_expr();
+
+        while let Some(operator) = self.token_match(&[TokenType::OR]) {
+            let right = self.and_expr();
+            expr = Expr::Logical(Box::new(expr), operator.clone(), Box::new(right));
+        }
+        expr
+    }
+
+    fn and_expr(&mut self) -> Expr {
+        let mut expr = self.equality();
+
+        while let Some(operator) = self.token_match(&[TokenType::AND]) {
+            let right = self.equality();
+            expr = Expr::Logical(Box::new(expr), operator.clone(), Box::new(right));
+        }
+        expr
+    }
+
     fn assignment(&mut self) -> Expr {
-        let expr = self.equality();
+        let expr = self.or_expr();
 
         if self.token_match(&[TokenType::EQUAL]).is_some() {
             // let equals = previous();

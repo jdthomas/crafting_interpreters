@@ -37,10 +37,10 @@ impl fmt::Display for Object {
     }
 }
 
-pub fn truthy(o: Object) -> bool {
+pub fn truthy(o: &Object) -> bool {
     match o {
         Object::Nil => false,
-        Object::Boolean(x) => x,
+        Object::Boolean(x) => *x,
         _ => true,
     }
 }
@@ -62,7 +62,7 @@ impl<'a> Interpreter<'a> {
         let right = self.evaluate(e)?;
         match (&t.token_type, right) {
             (TokenType::MINUS, Object::Double(x)) => Ok(Object::Double(-x)),
-            (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(o))),
+            (TokenType::BANG, o) => Ok(Object::Boolean(!truthy(&o))),
             _ => Err(anyhow!("oopsies, bad unary")).context(LoxRuntimeError {
                 t: t.clone(),
                 message: "".to_owned(),
@@ -143,6 +143,17 @@ impl<'a> Interpreter<'a> {
                     Ok(Object::Nil)
                 }
             }
+            Expr::Logical(l, o, r) => {
+                let left = self.evaluate(l)?;
+                if o.token_type == TokenType::OR {
+                    if truthy(&left) {
+                        return Ok(left);
+                    }
+                } else if !truthy(&left) {
+                    return Ok(left);
+                }
+                self.evaluate(r)
+            }
             Expr::Assign(n, v) => {
                 let val = self.evaluate(v)?;
                 if let TokenType::IDENTIFIER(name) = &n.token_type {
@@ -188,6 +199,15 @@ impl<'a> Interpreter<'a> {
                     .collect();
                 self.env.pop_scope();
                 result
+            }
+            Stmt::If(c, t, e) => {
+                if truthy(&self.evaluate(c)?) {
+                    self.execute(t)
+                } else if let Some(e) = e {
+                    self.execute(e)
+                } else {
+                    Ok(())
+                }
             }
         }
     }

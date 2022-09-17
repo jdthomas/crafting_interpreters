@@ -45,7 +45,7 @@ impl Lox {
         let mut tok = tok.iter().peekable();
         let mut parser = parser::Parser::new(&mut tok, self);
 
-        let ast = parser.parse();
+        let ast = parser.parse()?;
         // println!("AST: {:?}", ast);
         if self.check_err().is_err() {
             return Err(anyhow!("failed to scan")).context(LoxParseError {});
