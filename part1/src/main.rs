@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use lib::environment::Enviornment;
 use lib::lox::Lox;
+use lib::lox::LoxOptions;
 use lib::lox::LoxParseError;
 use lib::lox::LoxRuntimeError;
 use lib::lox::LoxScanError;
@@ -16,16 +17,18 @@ struct Args {
     /// Script to run
     #[clap()]
     script: Option<String>,
+    #[clap(flatten)]
+    lox_options: LoxOptions,
 }
 
-fn run_file(script_path: &str) -> Result<()> {
-    let mut l = Lox::new();
+fn run_file(script_path: &str, opts: LoxOptions) -> Result<()> {
+    let mut l = Lox::new(opts);
     let data = fs::read_to_string(script_path)?;
     l.run(data)
 }
 
-fn run_prompt() -> Result<()> {
-    let mut l = Lox::new();
+fn run_prompt(opts: LoxOptions) -> Result<()> {
+    let mut l = Lox::new(opts);
     let mut env = Enviornment::new();
     const HISTORY_FILE: &str = "history.txt";
 
@@ -65,8 +68,8 @@ fn main() -> Result<()> {
     let args = Args::parse();
     // println!("Hello, world! {:?}", args);
     let rv = match args.script {
-        None => run_prompt(),
-        Some(script) => run_file(&script),
+        None => run_prompt(args.lox_options),
+        Some(script) => run_file(&script, args.lox_options),
     };
     if let Err(e) = &rv {
         if e.downcast_ref::<LoxScanError>().is_some() {

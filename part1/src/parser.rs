@@ -16,6 +16,7 @@ pub enum Expr {
     Variable(Token),
     Assign(Token, Box<Expr>),
     Logical(Box<Expr>, Token, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 #[derive(Debug)]
@@ -45,6 +46,9 @@ impl fmt::Display for Expr {
             }
             Self::Logical(l, o, r) => {
                 write!(f, "{} {} {}", l, o.token_type, r)
+            }
+            Self::Call(callee, args) => {
+                write!(f, "{} {:?}", callee, args)
             }
         }
     }
@@ -376,8 +380,35 @@ impl<'a> Parser<'a> {
             let right = self.unary();
             Expr::Unary(operator.clone(), Box::new(right))
         } else {
-            self.primary()
+            self.call()
         }
+    }
+
+    fn call(&mut self) -> Expr {
+        let mut expr = self.primary();
+        while let Some(operator) = self.token_match(&[TokenType::LEFT_PAREN]) {
+            expr = self.finish_call(expr);
+        }
+        expr
+    }
+    fn finish_call(&mut self, callee: Expr) -> Expr {
+        let mut arguments: Vec<Expr> = vec![];
+        if let Some(operator) = self.token_match(&[TokenType::RIGHT_PAREN]) {
+        } else {
+            loop {
+                arguments.push(self.expression());
+                if let Some(operator) = self.token_match(&[TokenType::COMMA]) {
+                } else {
+                    if self.token_match(&[TokenType::RIGHT_PAREN]).is_none() {
+                        // "Expect ')' after arguments."
+                        todo!();
+                    }
+                    break;
+                }
+            }
+        }
+
+        Expr::Call(Box::new(callee), arguments)
     }
 
     fn primary(&mut self) -> Expr {

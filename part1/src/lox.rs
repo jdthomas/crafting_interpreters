@@ -6,10 +6,12 @@ use crate::scanner;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use clap::Parser;
 use derive_more::Display;
 
 pub struct Lox {
     pub has_error: bool,
+    opts: LoxOptions,
 }
 
 #[derive(Debug, Display)]
@@ -18,9 +20,18 @@ pub struct LoxScanError {}
 pub struct LoxParseError {}
 pub use crate::interpreter::LoxRuntimeError;
 
+#[derive(Parser, Debug)]
+pub struct LoxOptions {
+    #[clap(short, long)]
+    debug_ast: bool,
+}
+
 impl Lox {
-    pub fn new() -> Lox {
-        Lox { has_error: false }
+    pub fn new(opts: LoxOptions) -> Lox {
+        Lox {
+            has_error: false,
+            opts,
+        }
     }
 
     fn check_err(&self) -> Result<()> {
@@ -46,7 +57,9 @@ impl Lox {
         let mut parser = parser::Parser::new(&mut tok, self);
 
         let ast = parser.parse()?;
-        // println!("AST: {:?}", ast);
+        if self.opts.debug_ast {
+            println!("AST: {:?}", ast);
+        }
         if self.check_err().is_err() {
             return Err(anyhow!("failed to scan")).context(LoxParseError {});
         }
@@ -66,7 +79,7 @@ impl Lox {
 
 impl Default for Lox {
     fn default() -> Self {
-        Self::new()
+        Self::new(LoxOptions { debug_ast: false })
     }
 }
 

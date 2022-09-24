@@ -1,11 +1,11 @@
-use std::fmt;
-use std::fmt::{Debug, Display};
-
 use crate::environment::Enviornment;
 use crate::parser::{Expr, Stmt};
 use crate::tokens::{Token, TokenType};
 use anyhow::Result;
 use anyhow::{anyhow, Context};
+use std::fmt;
+use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Object {
@@ -13,6 +13,56 @@ pub enum Object {
     Boolean(bool),
     Double(f64),
     String(String),
+    Callable(LoxCallableWrapper),
+}
+// This wrapper is just here so I can get around being able to derive PartialEq on the enum while ignoring (always false) Callables
+#[derive(Debug, Clone)]
+pub struct LoxCallableWrapper {
+    inner: Rc<dyn LoxCallable>,
+}
+impl LoxCallable for LoxCallableWrapper {
+    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
+        self.inner.call(i, args)
+    }
+}
+
+pub trait LoxCallable: Debug {
+    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object;
+}
+impl PartialEq for LoxCallableWrapper {
+    fn eq(self: &'_ Self, _: &'_ Self) -> bool {
+        false
+    }
+}
+
+#[derive(Debug)]
+struct LoxFunction {
+    body: Stmt,
+}
+
+impl LoxCallable for LoxFunction {
+    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
+        todo!()
+        // Environment environment = new Environment(interpreter.globals);
+        // for (int i = 0; i < declaration.params.size(); i++) {
+        //   environment.define(declaration.params.get(i).lexeme,
+        //       arguments.get(i));
+        // }
+
+        // interpreter.executeBlock(declaration.body, environment);
+        // return null;
+    }
+}
+
+#[derive(Debug)]
+struct LoxBuiltinClock {}
+impl LoxCallable for LoxBuiltinClock {
+    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time");
+        Object::Double(now.as_secs_f64())
+    }
 }
 
 #[derive(Debug)]
@@ -32,6 +82,7 @@ impl fmt::Display for Object {
             Self::Boolean(b) => write!(f, "{}", b),
             Self::Double(d) => write!(f, "{}", d),
             Self::String(s) => write!(f, "{}", s),
+            Self::Callable(s) => write!(f, "...calable..."),
             Self::Nil => write!(f, "Nil"),
         }
     }
@@ -56,6 +107,12 @@ impl<'a> Interpreter<'a> {
     //     }
     // }
     pub fn new_with_env(env: &'a mut Enviornment) -> Self {
+        env.define(
+            "clock".to_owned(),
+            Object::Callable(LoxCallableWrapper {
+                inner: Rc::new(LoxBuiltinClock {}),
+            }),
+        );
         Interpreter { env }
     }
     pub fn evaluate_unary(&mut self, t: &Token, e: &Expr) -> Result<Object> {
@@ -166,6 +223,20 @@ impl<'a> Interpreter<'a> {
                     self.env.get(name)
                 } else {
                     Ok(Object::Nil)
+                }
+            }
+            Expr::Call(callee, args) => {
+                let callee = self.evaluate(callee)?;
+                let mut arguments: Result<Vec<Object>> = args
+                    .iter()
+                    .map(|arg| self.evaluate(arg))
+                    .into_iter()
+                    .collect();
+                let arguments = arguments?;
+
+                match callee {
+                    Object::Callable(c) => Ok(c.call(self, arguments)),
+                    _ => todo!(), /*Runtime error */
                 }
             }
         }
