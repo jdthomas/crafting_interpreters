@@ -30,34 +30,33 @@ pub trait LoxCallable: Debug {
     fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object;
 }
 impl PartialEq for LoxCallableWrapper {
-    fn eq(self: &'_ Self, _: &'_ Self) -> bool {
+    fn eq(&self, _: &Self) -> bool {
         false
     }
 }
 
 #[derive(Debug)]
 struct LoxFunction {
+    params: Vec<Token>,
     body: Stmt,
 }
 
 impl LoxCallable for LoxFunction {
-    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
-        todo!()
-        // Environment environment = new Environment(interpreter.globals);
-        // for (int i = 0; i < declaration.params.size(); i++) {
-        //   environment.define(declaration.params.get(i).lexeme,
-        //       arguments.get(i));
-        // }
+    fn call(&self, i: &mut Interpreter, _args: Vec<Object>) -> Object {
+        i.env.push_scope();
+        // FIXME: Put args into scope
+        // itertools::zip(self.params, args).for_each(|(p,a)| i.env.define(p, a));
+        let _res = i.execute(&self.body);
+        i.env.pop_scope();
 
-        // interpreter.executeBlock(declaration.body, environment);
-        // return null;
+        Object::Nil
     }
 }
 
 #[derive(Debug)]
 struct LoxBuiltinClock {}
 impl LoxCallable for LoxBuiltinClock {
-    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
+    fn call(&self, _i: &mut Interpreter, _args: Vec<Object>) -> Object {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time");
@@ -82,7 +81,7 @@ impl fmt::Display for Object {
             Self::Boolean(b) => write!(f, "{}", b),
             Self::Double(d) => write!(f, "{}", d),
             Self::String(s) => write!(f, "{}", s),
-            Self::Callable(s) => write!(f, "...calable..."),
+            Self::Callable(_s) => write!(f, "...calable..."),
             Self::Nil => write!(f, "Nil"),
         }
     }
@@ -227,7 +226,7 @@ impl<'a> Interpreter<'a> {
             }
             Expr::Call(callee, args) => {
                 let callee = self.evaluate(callee)?;
-                let mut arguments: Result<Vec<Object>> = args
+                let arguments: Result<Vec<Object>> = args
                     .iter()
                     .map(|arg| self.evaluate(arg))
                     .into_iter()
@@ -284,6 +283,18 @@ impl<'a> Interpreter<'a> {
                 while truthy(&self.evaluate(c)?) {
                     self.execute(s)?;
                 }
+                Ok(())
+            }
+            Stmt::Function(name, params, body) => {
+                self.env.define(
+                    name.clone(),
+                    Object::Callable(LoxCallableWrapper {
+                        inner: Rc::new(LoxFunction {
+                            params: params.clone(),
+                            body: *body.clone(),
+                        }),
+                    }),
+                );
                 Ok(())
             }
         }

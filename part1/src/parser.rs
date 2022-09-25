@@ -1,13 +1,15 @@
 use crate::lox_error::LoxError;
 use crate::tokens::{Token, TokenType};
 use anyhow::anyhow;
+use anyhow::Context;
 use anyhow::Result;
+use itertools::Itertools;
 use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
@@ -19,7 +21,7 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
     Print(Expr),
@@ -27,6 +29,7 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
+    Function(String, Vec<Token>, Box<Stmt>),
 }
 
 impl fmt::Display for Expr {
@@ -64,6 +67,7 @@ impl fmt::Display for Stmt {
             Self::Block(stmts) => write!(f, "{:?}", stmts),
             Self::If(c, t, e) => write!(f, "{} {} {:?}", c, t, e),
             Self::While(c, s) => write!(f, "{} {}", c, s),
+            Self::Function(n, p, b) => write!(f, "{} {:?} {} ", n, p, b),
         }
     }
 }
@@ -105,12 +109,67 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn consume(&mut self, t: TokenType, msg: &str) -> Result<&Token> {
+        self.token_match(&[t]).ok_or_else(|| {
+            self.lox.report(self.tokens.peek().unwrap().line, "", msg);
+            anyhow!("{}", msg)
+        })
+    }
+    fn consume_identifier(&mut self, msg: &str) -> Result<String> {
+        let cur_token = self.tokens.peek().unwrap();
+        if let TokenType::IDENTIFIER(name) = cur_token.token_type.clone() {
+            self.tokens.next();
+            Ok(name)
+        } else {
+            self.lox.report(cur_token.line, "", msg);
+            Err(anyhow!(""))
+        }
+    }
+
     fn declaration(&mut self) -> Result<Stmt> {
         let cur_token = self.tokens.peek().unwrap();
         match cur_token.token_type {
             TokenType::VAR => self.var_declaration(),
+            TokenType::FUN => self.fun_declaration(),
             _ => self.statement(),
         }
+    }
+
+    fn fun_declaration(&mut self) -> Result<Stmt> {
+        let kind = "function";
+        self.tokens.next(); // skip FUN
+        let name = self.consume_identifier(&format!("Expect {} name.", kind))?;
+        let _ = self.consume(
+            TokenType::LEFT_PAREN,
+            &format!("Expect '(' after {} name", kind),
+        );
+        let parameters: Result<Vec<Token>> = self
+            .tokens
+            .take_while(|token| token.token_type != TokenType::RIGHT_PAREN)
+            .chain(&[Token {
+                token_type: TokenType::COMMA,
+                line: 0,
+            }])
+            .tuples::<(_, _)>()
+            .map(|(name, comma)| -> Result<Token> {
+                // println!("T1: {} t2: {}", name, comma);
+                match (&name.token_type, &comma.token_type) {
+                    (TokenType::IDENTIFIER(_), TokenType::COMMA) => Ok(name.clone()),
+                    (_, _) => Err(anyhow!("Expected identifier, comma pairs")),
+                }
+            })
+            .into_iter()
+            .collect();
+        let parameters = parameters?;
+        // FIXME: the take_while ate our paren, should find a way to report that error
+        // let _ = self.consume(TokenType::RIGHT_PAREN, "Expect ')' after paramaters");
+        let cur_token = self.tokens.peek().unwrap();
+        let body = match cur_token.token_type {
+            TokenType::LEFT_BRACE => self.block(),
+            _ => todo!(),
+        }?;
+
+        Ok(Stmt::Function(name, parameters, Box::new(body)))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt> {
@@ -386,18 +445,18 @@ impl<'a> Parser<'a> {
 
     fn call(&mut self) -> Expr {
         let mut expr = self.primary();
-        while let Some(operator) = self.token_match(&[TokenType::LEFT_PAREN]) {
+        while let Some(_operator) = self.token_match(&[TokenType::LEFT_PAREN]) {
             expr = self.finish_call(expr);
         }
         expr
     }
     fn finish_call(&mut self, callee: Expr) -> Expr {
         let mut arguments: Vec<Expr> = vec![];
-        if let Some(operator) = self.token_match(&[TokenType::RIGHT_PAREN]) {
+        if let Some(_operator) = self.token_match(&[TokenType::RIGHT_PAREN]) {
         } else {
             loop {
                 arguments.push(self.expression());
-                if let Some(operator) = self.token_match(&[TokenType::COMMA]) {
+                if let Some(_operator) = self.token_match(&[TokenType::COMMA]) {
                 } else {
                     if self.token_match(&[TokenType::RIGHT_PAREN]).is_none() {
                         // "Expect ')' after arguments."
