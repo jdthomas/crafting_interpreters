@@ -104,8 +104,8 @@ impl fmt::Display for Object {
             Self::Double(d) => write!(f, "{}", d),
             Self::String(s) => write!(f, "{}", s),
             Self::Callable(_s) => write!(f, "...calable..."),
-            Self::Return(_o) => write!(f, "...Return..."),
-            Self::Nil => write!(f, "Nil"),
+            Self::Return(o) => write!(f, "...returning {}...", o),
+            Self::Nil => write!(f, "nil"),
         }
     }
 }
@@ -288,9 +288,10 @@ impl<'a> Interpreter<'a> {
                 let mut result: Vec<Result<StmtResult>> = stmts
                     .iter()
                     .map(|s| -> Result<StmtResult> { self.execute(s) })
-                    .take_until(|r| matches!(r, Ok(StmtResult::Noop)))
+                    .take_until(|r| !matches!(r, Ok(StmtResult::Noop)))
                     .into_iter()
                     .collect();
+                // println!("jt: {:?}", result);
                 self.env.pop_scope();
                 result.pop().unwrap_or(Ok(StmtResult::Noop))
             }
@@ -305,7 +306,10 @@ impl<'a> Interpreter<'a> {
             }
             Stmt::While(c, s) => {
                 while truthy(&self.evaluate(c)?) {
-                    self.execute(s)?;
+                    let r = self.execute(s);
+                    if !matches!(r, Ok(StmtResult::Noop)) {
+                        return r;
+                    };
                 }
                 Ok(StmtResult::Noop)
             }

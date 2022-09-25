@@ -58,7 +58,7 @@ impl Lox {
 
         let ast = parser.parse()?;
         if self.opts.debug_ast {
-            println!("AST: {:?}", ast);
+            println!("AST: {:#?}", ast);
         }
         if self.check_err().is_err() {
             return Err(anyhow!("failed to scan")).context(LoxParseError {});

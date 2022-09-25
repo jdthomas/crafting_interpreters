@@ -210,17 +210,17 @@ impl Test {
             ))
         }
     }
-    fn validate_output(&self, _std_out: &[String]) -> Result<()> {
-        // if !self.expected_output.is_empty() {
-        //     let matching = zip(&self.expected_output, std_out)
-        //         .filter(|&(a, b)| &a.output == b)
-        //         .count();
-        //     println!("{:?} {:?} {}", &self.expected_output, std_out, matching);
-        //     if matching == std_out.len() && matching == self.expected_output.len() {
-        //         Ok(())
-        //     } else {
-        //         Err(anyhow!("Output Error"))
-        //     }
+    fn validate_output(&self, std_out: &[String]) -> Result<()> {
+        if !self.expected_output.is_empty() {
+            let matching = zip(&self.expected_output, std_out)
+                .filter(|&(a, b)| &a.output == b)
+                .count();
+            println!("{:?} {:?} {}", &self.expected_output, std_out, matching);
+            if matching == std_out.len() && matching == self.expected_output.len() {
+                Ok(())
+            } else {
+                Err(anyhow!("Output Error"))
+            }
         //     //         // Remove the trailing last empty line.
         //     // if (outputLines.isNotEmpty && outputLines.last == "") {
         //     //     outputLines.removeLast();
@@ -247,10 +247,10 @@ impl Test {
         //     //         "${expected.line}.");
         //     //     index++;
         //     //   }
-        // } else {
-        //     Ok(())
-        // }
-        Ok(())
+        // Ok(())
+        } else {
+            Ok(())
+        }
     }
 }
 
