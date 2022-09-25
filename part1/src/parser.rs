@@ -1,7 +1,6 @@
 use crate::lox_error::LoxError;
 use crate::tokens::{Token, TokenType};
 use anyhow::anyhow;
-use anyhow::Context;
 use anyhow::Result;
 use itertools::Itertools;
 use std::fmt;
@@ -30,6 +29,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
     Function(String, Vec<Token>, Box<Stmt>),
+    Return(Token, Option<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -68,6 +68,7 @@ impl fmt::Display for Stmt {
             Self::If(c, t, e) => write!(f, "{} {} {:?}", c, t, e),
             Self::While(c, s) => write!(f, "{} {}", c, s),
             Self::Function(n, p, b) => write!(f, "{} {:?} {} ", n, p, b),
+            Self::Return(r, v) => write!(f, "{} {:?}", r, v),
         }
     }
 }
@@ -203,8 +204,23 @@ impl<'a> Parser<'a> {
             TokenType::FOR => self.for_statement(),
             TokenType::IF => self.if_statement(),
             TokenType::LEFT_BRACE => self.block(),
+            TokenType::RETURN => self.return_statement(),
             _ => self.expression_statement(),
         }
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt> {
+        let kw = self.tokens.next().unwrap(); // skip RETURN token
+
+        let value = if self.token_match(&[TokenType::SEMICOLON]).is_some() {
+            None
+        } else {
+            let e = Some(self.expression());
+            self.token_match(&[TokenType::SEMICOLON]); // FIXME: Fail if not a match
+            e
+        };
+
+        Ok(Stmt::Return(kw.clone(), value))
     }
 
     fn for_statement(&mut self) -> Result<Stmt> {

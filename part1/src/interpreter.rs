@@ -6,6 +6,7 @@ use anyhow::{anyhow, Context};
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
+use take_until::TakeUntilExt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Object {
@@ -14,7 +15,9 @@ pub enum Object {
     Double(f64),
     String(String),
     Callable(LoxCallableWrapper),
+    Return(Box<Object>),
 }
+
 // This wrapper is just here so I can get around being able to derive PartialEq on the enum while ignoring (always false) Callables
 #[derive(Debug, Clone)]
 pub struct LoxCallableWrapper {
@@ -40,16 +43,29 @@ struct LoxFunction {
     params: Vec<Token>,
     body: Stmt,
 }
-
+fn identifier_name(t: &Token) -> Option<String> {
+    match &t.token_type {
+        TokenType::IDENTIFIER(name) => Some(name.clone()),
+        _ => None,
+    }
+}
 impl LoxCallable for LoxFunction {
-    fn call(&self, i: &mut Interpreter, _args: Vec<Object>) -> Object {
+    fn call(&self, i: &mut Interpreter, args: Vec<Object>) -> Object {
         i.env.push_scope();
-        // FIXME: Put args into scope
-        // itertools::zip(self.params, args).for_each(|(p,a)| i.env.define(p, a));
-        let _res = i.execute(&self.body);
+        // FIXME: Verify params/args lengths match
+        itertools::zip(&self.params, &args).for_each(|(p, a)| {
+            i.env.define(
+                identifier_name(p).unwrap_or("FIXME: Something has gone wrong :P ".to_string()),
+                a.clone(),
+            )
+        });
+        let res = i.execute(&self.body);
         i.env.pop_scope();
 
-        Object::Nil
+        match res {
+            Ok(StmtResult::Return(r)) => r,
+            _ => Object::Nil,
+        }
     }
 }
 
@@ -62,6 +78,12 @@ impl LoxCallable for LoxBuiltinClock {
             .expect("time");
         Object::Double(now.as_secs_f64())
     }
+}
+
+#[derive(Debug, Clone)]
+enum StmtResult {
+    Noop,
+    Return(Object),
 }
 
 #[derive(Debug)]
@@ -82,6 +104,7 @@ impl fmt::Display for Object {
             Self::Double(d) => write!(f, "{}", d),
             Self::String(s) => write!(f, "{}", s),
             Self::Callable(_s) => write!(f, "...calable..."),
+            Self::Return(_o) => write!(f, "...Return..."),
             Self::Nil => write!(f, "Nil"),
         }
     }
@@ -241,15 +264,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn execute(&mut self, ast: &Stmt) -> Result<()> {
+    fn execute(&mut self, ast: &Stmt) -> Result<StmtResult> {
         match ast {
             Stmt::Print(e) => {
                 println!("{}", self.evaluate(e)?);
-                Ok(())
+                Ok(StmtResult::Noop)
             }
             Stmt::Expr(e) => {
                 self.evaluate(e)?;
-                Ok(())
+                Ok(StmtResult::Noop)
             }
             Stmt::Var(name, e) => {
                 if let Some(expr) = e {
@@ -258,17 +281,18 @@ impl<'a> Interpreter<'a> {
                 } else {
                     self.env.define(name.clone(), Object::Nil)
                 }
-                Ok(())
+                Ok(StmtResult::Noop)
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
-                let result: Result<()> = stmts
+                let mut result: Vec<Result<StmtResult>> = stmts
                     .iter()
-                    .map(|s| -> Result<()> { self.execute(s) })
+                    .map(|s| -> Result<StmtResult> { self.execute(s) })
+                    .take_until(|r| matches!(r, Ok(StmtResult::Noop)))
                     .into_iter()
                     .collect();
                 self.env.pop_scope();
-                result
+                result.pop().unwrap_or(Ok(StmtResult::Noop))
             }
             Stmt::If(c, t, e) => {
                 if truthy(&self.evaluate(c)?) {
@@ -276,14 +300,14 @@ impl<'a> Interpreter<'a> {
                 } else if let Some(e) = e {
                     self.execute(e)
                 } else {
-                    Ok(())
+                    Ok(StmtResult::Noop)
                 }
             }
             Stmt::While(c, s) => {
                 while truthy(&self.evaluate(c)?) {
                     self.execute(s)?;
                 }
-                Ok(())
+                Ok(StmtResult::Noop)
             }
             Stmt::Function(name, params, body) => {
                 self.env.define(
@@ -295,7 +319,19 @@ impl<'a> Interpreter<'a> {
                         }),
                     }),
                 );
-                Ok(())
+                Ok(StmtResult::Noop)
+            }
+            Stmt::Return(_kw, v) => {
+                // TODO: Find a way to handle the unwind here ... we don't have throw like java, could use the Error short circuting, but that feels ... gross.
+                // FIXME: Maybe something like this guy did: https://github.com/franeklubi/luxya/blob/c38bd0a3e3063241f0e7517778adab6040ddf08a/src/interpreter/types.rs#L144-L149
+                // which has a StmtResult (Continue, Break, Return, Noop) to propagate those statement actions up 🤔
+
+                let rv = if let Some(v) = v {
+                    self.evaluate(v)?
+                } else {
+                    Object::Nil
+                };
+                Ok(StmtResult::Return(rv))
             }
         }
     }
@@ -304,6 +340,12 @@ impl<'a> Interpreter<'a> {
         statements
             .iter()
             .map(|statement| self.execute(statement))
+            .map(|r| -> Result<()> {
+                match r {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(e),
+                }
+            })
             .into_iter()
             .collect()
     }
