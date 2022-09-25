@@ -155,7 +155,7 @@ pub fn scan_tokens(lox: &mut dyn LoxError, source: &str) -> Result<Vec<Token>> {
                 let mut value = Vec::new();
                 value.push(c);
                 while chars.peek().is_some()
-                    && (chars.peek().unwrap().is_ascii_alphabetic() || chars.peek() == Some(&'_'))
+                    && (chars.peek().unwrap().is_ascii_alphanumeric() || chars.peek() == Some(&'_'))
                 {
                     value.push(chars.next().unwrap());
                 }
